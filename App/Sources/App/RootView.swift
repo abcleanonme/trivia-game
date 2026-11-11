@@ -23,4 +23,4 @@ struct RootView: View {
     }
 }
 
-#Preview { RootView() }
+#Preview { RootView().environment(PlayerStore.preview) }

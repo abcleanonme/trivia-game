@@ -1,37 +1,271 @@
+import Foundation
 import Testing
 @testable import TriviaKit
 
-@Suite struct GameSessionTests {
-    @Test func correctAnswerScores() {
-        var game = GameSession(questions: Question.samples)
-        game.answer(Question.samples[0].correctIndex)
-        #expect(game.score == 1)
+/// Deterministic RNG so power-up and dealing tests are repeatable.
+struct SeededRNG: RandomNumberGenerator {
+    var state: UInt64
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
+
+private func q(_ n: Int, correct: Int = 0) -> Question {
+    Question(category: "Test", prompt: "Q\(n)", choices: ["A", "B", "C", "D"], correctIndex: correct)
+}
+
+private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0) } }
+
+@Suite struct ScoringTests {
+    @Test func instantAnswerGetsFullSpeedBonus() {
+        let b = Scoring.breakdown(timeRemaining: 20, streak: 1, powerUp: nil)
+        #expect(b == ScoreBreakdown(base: 100, speed: 50, streakBonus: 0))
+        #expect(b.total == 150)
     }
 
-    @Test func wrongAnswerDoesNotScore() {
-        var game = GameSession(questions: Question.samples)
-        game.answer((Question.samples[0].correctIndex + 1) % 4)
-        #expect(game.score == 0)
+    @Test func speedBonusScalesWithTimeLeft() {
+        #expect(Scoring.breakdown(timeRemaining: 10, streak: 1, powerUp: nil).speed == 25)
+        #expect(Scoring.breakdown(timeRemaining: 0, streak: 1, powerUp: nil).speed == 0)
+        // Extra time can push the clock past 20s; the bonus still caps at 50.
+        #expect(Scoring.breakdown(timeRemaining: 28, streak: 1, powerUp: nil).speed == 50)
+    }
+
+    @Test func relaxedModeHasNoSpeedBonus() {
+        #expect(Scoring.breakdown(timeRemaining: nil, streak: 1, powerUp: nil).total == 100)
+    }
+
+    @Test func streakMultipliers() {
+        #expect(Scoring.multiplier(forStreak: 2) == 1)
+        #expect(Scoring.multiplier(forStreak: 3) == 1.5)
+        #expect(Scoring.multiplier(forStreak: 4) == 1.5)
+        #expect(Scoring.multiplier(forStreak: 5) == 2)
+        #expect(Scoring.breakdown(timeRemaining: nil, streak: 3, powerUp: nil).total == 150)
+        #expect(Scoring.breakdown(timeRemaining: nil, streak: 5, powerUp: nil).total == 200)
+    }
+
+    @Test func powerUpForfeitsSpeedBonus() {
+        #expect(Scoring.breakdown(timeRemaining: 20, streak: 1, powerUp: .fiftyFifty).total == 100)
+    }
+
+    @Test func doubleDownDoubles() {
+        let b = Scoring.breakdown(timeRemaining: 20, streak: 3, powerUp: .doubleDown)
+        #expect(b.total == 300) // 100 base, no speed, x1.5 streak, x2
+    }
+
+    @Test func secondChanceHalves() {
+        #expect(Scoring.breakdown(timeRemaining: 5, streak: 1, powerUp: .secondChance).total == 50)
+    }
+
+    @Test func sparksAreOnePerTenPoints() {
+        #expect(Scoring.sparks(forPoints: 1_249) == 124)
+        #expect(Scoring.sparks(forPoints: 0) == 0)
+    }
+}
+
+@Suite struct GameSessionTests {
+    @Test func correctAnswerScores() {
+        var game = GameSession(questions: makeQuestions(3))
+        game.answer(0)
+        #expect(game.totalPoints == 150)
+        #expect(game.streak == 1)
+    }
+
+    @Test func wrongAnswerDoesNotScoreAndResetsStreak() {
+        var game = GameSession(questions: makeQuestions(3))
+        game.answer(0); game.advance()
+        game.answer(1)
+        #expect(game.totalPoints == 150)
+        #expect(game.streak == 0)
+        #expect(game.bestStreak == 1)
+    }
+
+    @Test func clockRunningOutIsAMiss() {
+        var game = GameSession(questions: makeQuestions(2))
+        game.tick(by: 19.9)
+        #expect(game.phase == .asking)
+        game.tick(by: 0.2)
+        guard case .answered(let r) = game.phase else { Issue.record("expected answered"); return }
+        #expect(r.timedOut)
+        #expect(!r.correct)
+    }
+
+    @Test func relaxedModeClockNeverMoves() {
+        var game = GameSession(questions: makeQuestions(1), isTimed: false)
+        game.tick(by: 100)
+        #expect(game.phase == .asking)
+        game.answer(0)
+        #expect(game.totalPoints == 100)
     }
 
     @Test func finishesAfterLastQuestion() {
-        var game = GameSession(questions: Question.samples)
-        for q in Question.samples {
-            game.answer(q.correctIndex)
+        var game = GameSession(questions: makeQuestions(3))
+        for _ in 0..<3 {
+            game.answer(0)
             game.advance()
         }
-        #expect(game.state == .finished)
-        #expect(game.score == Question.samples.count)
+        #expect(game.phase == .finished)
+        #expect(game.correctCount == 3)
+        #expect(game.currentQuestion == nil)
     }
 
     @Test func cannotAnswerTwice() {
-        var game = GameSession(questions: Question.samples)
-        game.answer(Question.samples[0].correctIndex)
-        game.answer(Question.samples[0].correctIndex)
-        #expect(game.score == 1)
+        var game = GameSession(questions: makeQuestions(2))
+        game.answer(0)
+        game.answer(0)
+        #expect(game.results.count == 1)
     }
 
     @Test func emptyGameIsFinished() {
-        #expect(GameSession(questions: []).state == .finished)
+        #expect(GameSession(questions: []).phase == .finished)
+    }
+
+    @Test func streakBonusKicksInAtThree() {
+        var game = GameSession(questions: makeQuestions(5), isTimed: false)
+        for _ in 0..<5 { game.answer(0); game.advance() }
+        // 100, 100, 150, 150, 200
+        #expect(game.totalPoints == 700)
+        #expect(game.breakdown.streakBonus == 200)
+    }
+}
+
+@Suite struct PowerUpTests {
+    @Test func onlyOnePowerUpPerQuestion() {
+        var game = GameSession(questions: makeQuestions(2))
+        #expect(game.use(.extraTime))
+        #expect(!game.use(.doubleDown))
+        #expect(game.timeRemaining == 30)
+    }
+
+    @Test func roundLimitIsThree() {
+        var game = GameSession(questions: makeQuestions(5), isTimed: false)
+        for _ in 0..<3 {
+            #expect(game.use(.doubleDown))
+            game.answer(0); game.advance()
+        }
+        #expect(!game.canUse(.doubleDown))
+    }
+
+    @Test func fiftyFiftyRemovesTwoWrongAnswers() {
+        var rng = SeededRNG(state: 42)
+        var game = GameSession(questions: makeQuestions(1))
+        #expect(game.use(.fiftyFifty, using: &rng))
+        #expect(game.eliminated.count == 2)
+        #expect(!game.eliminated.contains(0))
+        // Eliminated answers can't be picked.
+        game.answer(game.eliminated.first!)
+        #expect(game.phase == .asking)
+    }
+
+    @Test func skipSwapsQuestionKeepsStreakAndResetsClock() {
+        let spare = q(99)
+        var game = GameSession(questions: makeQuestions(2), reserve: [spare])
+        game.answer(0); game.advance()
+        game.tick(by: 8)
+        #expect(game.use(.skip))
+        #expect(game.currentQuestion == spare)
+        #expect(game.streak == 1)
+        #expect(game.timeRemaining == GameRules.questionTime)
+        #expect(game.questions.count == 2)
+        #expect(!game.canUse(.skip)) // reserve now empty
+        #expect(game.canUse(.extraTime)) // fresh question, fresh slot
+    }
+
+    @Test func secondChanceRetriesForHalfPointsAndKeepsStreak() {
+        var game = GameSession(questions: makeQuestions(3))
+        game.answer(0); game.advance()
+        game.answer(0); game.advance()
+        #expect(game.streak == 2)
+        game.answer(2) // miss
+        #expect(game.streak == 0)
+        #expect(game.canUse(.secondChance))
+        #expect(game.use(.secondChance))
+        #expect(game.phase == .asking)
+        #expect(game.eliminated == [2])
+        #expect(game.streak == 2)
+        game.answer(0)
+        // streak 3 => x1.5 on 100 (no speed), then halved
+        #expect(game.results.last?.points == 75)
+        #expect(game.results.count == 3)
+    }
+
+    @Test func secondChanceNotOfferedAfterTimeout() {
+        var game = GameSession(questions: makeQuestions(1))
+        game.tick(by: 30)
+        #expect(!game.canUse(.secondChance))
+    }
+
+    @Test func secondChanceNotOfferedAfterAnotherPowerUp() {
+        var game = GameSession(questions: makeQuestions(1))
+        game.use(.doubleDown)
+        game.answer(1)
+        #expect(!game.canUse(.secondChance))
+        #expect(game.streak == 0)
+    }
+
+    @Test func doubleDownMissScoresNothing() {
+        var game = GameSession(questions: makeQuestions(1))
+        game.use(.doubleDown)
+        game.answer(3)
+        #expect(game.totalPoints == 0)
+    }
+}
+
+@Suite struct WalletTests {
+    @Test func buyAndConsume() {
+        var wallet = Wallet(sparks: 50)
+        #expect(wallet.buy(.fiftyFifty))
+        #expect(wallet.sparks == 20)
+        #expect(!wallet.buy(.fiftyFifty))
+        #expect(wallet.consume(.fiftyFifty))
+        #expect(!wallet.consume(.fiftyFifty))
+    }
+
+    @Test func roundTripsThroughJSON() throws {
+        let data = try JSONEncoder().encode(Wallet.starter)
+        #expect(try JSONDecoder().decode(Wallet.self, from: data) == .starter)
+    }
+}
+
+@Suite struct QuestionBankTests {
+    @Test func dealsDistinctQuestionsAndReserve() {
+        var rng = SeededRNG(state: 7)
+        let bank = QuestionBank(questions: makeQuestions(20))
+        let round = bank.dealRound(count: 10, reserve: 3, using: &rng)
+        #expect(round.questions.count == 10)
+        #expect(round.reserve.count == 3)
+        let ids = Set((round.questions + round.reserve).map(\.id))
+        #expect(ids.count == 13)
+    }
+
+    @Test func shufflingKeepsTheRightAnswer() {
+        var rng = SeededRNG(state: 1)
+        let original = Question(category: "T", prompt: "P", choices: ["w", "x", "y", "z"], correctIndex: 2)
+        for _ in 0..<10 {
+            #expect(original.shufflingChoices(using: &rng).correctAnswer == "y")
+        }
+    }
+
+    @Test func filtersByCategory() {
+        let bank = QuestionBank(questions: [
+            Question(category: "A", prompt: "1", choices: ["a", "b"], correctIndex: 0),
+            Question(category: "B", prompt: "2", choices: ["a", "b"], correctIndex: 0),
+        ])
+        #expect(bank.categories == ["A", "B"])
+        #expect(bank.dealRound(category: "B").questions.map(\.prompt) == ["2"])
+    }
+
+    @Test func decodesJSONWithoutIDs() throws {
+        let json = #"[{"category":"A","prompt":"P","choices":["x","y"],"correctIndex":1}]"#
+        let bank = try QuestionBank(jsonData: Data(json.utf8))
+        #expect(bank.questions.first?.correctAnswer == "y")
+    }
+
+    @Test func rejectsOutOfRangeAnswer() {
+        let json = #"[{"category":"A","prompt":"P","choices":["x","y"],"correctIndex":5}]"#
+        #expect(throws: DecodingError.self) { try QuestionBank(jsonData: Data(json.utf8)) }
     }
 }
