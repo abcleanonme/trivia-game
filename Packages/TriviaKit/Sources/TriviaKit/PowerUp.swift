@@ -35,6 +35,15 @@ public enum PowerUp: String, CaseIterable, Codable, Sendable, Identifiable {
         }
     }
 
+    /// Fits a quarter-width tray tile.
+    public var shortTitle: String {
+        switch self {
+        case .doubleDown: "2x"
+        case .secondChance: "Retry"
+        default: title
+        }
+    }
+
     public var summary: String {
         switch self {
         case .fiftyFifty: "Removes two wrong answers"

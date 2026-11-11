@@ -56,6 +56,9 @@ struct QuizView: View {
                             }
                         }
                     }
+                    // Fresh views per question, so old answers never crossfade
+                    // into the new ones.
+                    .id(question.id)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -325,7 +328,7 @@ private struct PowerUpTray: View {
                     Button { onUse(p) } label: {
                         VStack(spacing: 2) {
                             Image(systemName: p.systemImage).font(.headline)
-                            Text(p.title).font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.7)
+                            Text(p.shortTitle).font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.7)
                             Text(active ? "Active" : "\(count) left").font(.caption2.weight(.semibold))
                         }
                         .frame(maxWidth: .infinity, minHeight: 64)

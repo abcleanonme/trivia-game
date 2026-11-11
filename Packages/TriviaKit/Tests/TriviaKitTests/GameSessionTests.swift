@@ -135,15 +135,15 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
 @Suite struct PowerUpTests {
     @Test func onlyOnePowerUpPerQuestion() {
         var game = GameSession(questions: makeQuestions(2))
-        #expect(game.use(.extraTime))
-        #expect(!game.use(.doubleDown))
+        do { let ok = game.use(.extraTime); #expect(ok) }
+        do { let ok = game.use(.doubleDown); #expect(!ok) }
         #expect(game.timeRemaining == 30)
     }
 
     @Test func roundLimitIsThree() {
         var game = GameSession(questions: makeQuestions(5), isTimed: false)
         for _ in 0..<3 {
-            #expect(game.use(.doubleDown))
+            do { let ok = game.use(.doubleDown); #expect(ok) }
             game.answer(0); game.advance()
         }
         #expect(!game.canUse(.doubleDown))
@@ -152,7 +152,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     @Test func fiftyFiftyRemovesTwoWrongAnswers() {
         var rng = SeededRNG(state: 42)
         var game = GameSession(questions: makeQuestions(1))
-        #expect(game.use(.fiftyFifty, using: &rng))
+        do { let ok = game.use(.fiftyFifty, using: &rng); #expect(ok) }
         #expect(game.eliminated.count == 2)
         #expect(!game.eliminated.contains(0))
         // Eliminated answers can't be picked.
@@ -165,7 +165,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         var game = GameSession(questions: makeQuestions(2), reserve: [spare])
         game.answer(0); game.advance()
         game.tick(by: 8)
-        #expect(game.use(.skip))
+        do { let ok = game.use(.skip); #expect(ok) }
         #expect(game.currentQuestion == spare)
         #expect(game.streak == 1)
         #expect(game.timeRemaining == GameRules.questionTime)
@@ -182,7 +182,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         game.answer(2) // miss
         #expect(game.streak == 0)
         #expect(game.canUse(.secondChance))
-        #expect(game.use(.secondChance))
+        do { let ok = game.use(.secondChance); #expect(ok) }
         #expect(game.phase == .asking)
         #expect(game.eliminated == [2])
         #expect(game.streak == 2)
@@ -217,11 +217,11 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
 @Suite struct WalletTests {
     @Test func buyAndConsume() {
         var wallet = Wallet(sparks: 50)
-        #expect(wallet.buy(.fiftyFifty))
+        do { let ok = wallet.buy(.fiftyFifty); #expect(ok) }
         #expect(wallet.sparks == 20)
-        #expect(!wallet.buy(.fiftyFifty))
-        #expect(wallet.consume(.fiftyFifty))
-        #expect(!wallet.consume(.fiftyFifty))
+        do { let ok = wallet.buy(.fiftyFifty); #expect(!ok) }
+        do { let ok = wallet.consume(.fiftyFifty); #expect(ok) }
+        do { let ok = wallet.consume(.fiftyFifty); #expect(!ok) }
     }
 
     @Test func roundTripsThroughJSON() throws {
