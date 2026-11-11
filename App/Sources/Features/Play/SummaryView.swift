@@ -58,7 +58,7 @@ struct SummaryView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .foregroundStyle(Color(light: 0x17172B, dark: 0x17172B))
+                .foregroundStyle(Theme.onSpark)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 18)
                 .card(fill: Theme.spark, drop: 5)

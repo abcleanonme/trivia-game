@@ -249,12 +249,64 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         }
     }
 
+    @Test func avoidsRecentlySeenQuestionsWhenPossible() {
+        var rng = SeededRNG(state: 3)
+        let bank = QuestionBank(questions: makeQuestions(20))
+        let recent = Set((0..<10).map { "q\($0)" })
+        let round = bank.dealRound(count: 10, reserve: 0, avoiding: recent, using: &rng)
+        #expect(round.questions.allSatisfy { !recent.contains($0.prompt.lowercased()) })
+        // With too few fresh ones, recent questions fill the gap.
+        let big = bank.dealRound(count: 15, reserve: 0, avoiding: recent, using: &rng)
+        #expect(big.questions.count == 15)
+    }
+
+    @Test func mixedRoundsSpreadAcrossCategories() {
+        var rng = SeededRNG(state: 11)
+        // 60 "Games" questions and 5 each of six other categories.
+        var pool = (0..<60).map { Question(category: "Games", prompt: "g\($0)", choices: ["a", "b"], correctIndex: 0) }
+        for c in ["A", "B", "C", "D", "E", "F"] {
+            pool += (0..<5).map { Question(category: c, prompt: "\(c)\($0)", choices: ["a", "b"], correctIndex: 0) }
+        }
+        let round = QuestionBank(questions: pool).dealRound(count: 10, reserve: 0, using: &rng)
+        let games = round.questions.filter { $0.category == "Games" }.count
+        #expect(round.questions.count == 10)
+        #expect(games <= QuestionBank.maxPerCategoryInMix)
+    }
+
+    @Test func capsHardQuestions() {
+        let pool = (0..<20).map {
+            Question(category: "C\($0)", prompt: "p\($0)", choices: ["a", "b"], correctIndex: 0,
+                     difficulty: $0 < 15 ? "hard" : "easy")
+        }
+        let picked = QuestionBank.balanced(pool, take: 10, maxPerCategory: nil)
+        #expect(picked.count == 10)
+        // 3 hard allowed + 5 easy available = 8, then hard ones fill the gap.
+        #expect(picked.prefix(8).filter { $0.difficulty == "hard" }.count == 3)
+    }
+
+    @Test func categoryRoundsIgnoreTheCategoryCap() {
+        let pool = (0..<12).map { Question(category: "Games", prompt: "g\($0)", choices: ["a", "b"], correctIndex: 0) }
+        #expect(QuestionBank(questions: pool).dealRound(count: 10, reserve: 0, category: "Games").questions.count == 10)
+    }
+
+    @Test func mergingDropsDuplicatePrompts() {
+        let a = QuestionBank(questions: makeQuestions(3))
+        let b = QuestionBank(questions: makeQuestions(5))
+        #expect(QuestionBank(merging: [a, b]).questions.count == 5)
+    }
+
+    @Test func categoriesFollowPreferredOrder() {
+        let bank = QuestionBank(questions: ["Zoology", "History", "General"].map {
+            Question(category: $0, prompt: $0, choices: ["a", "b"], correctIndex: 0)
+        })
+        #expect(bank.categories == ["General", "History", "Zoology"])
+    }
+
     @Test func filtersByCategory() {
         let bank = QuestionBank(questions: [
             Question(category: "A", prompt: "1", choices: ["a", "b"], correctIndex: 0),
             Question(category: "B", prompt: "2", choices: ["a", "b"], correctIndex: 0),
         ])
-        #expect(bank.categories == ["A", "B"])
         #expect(bank.dealRound(category: "B").questions.map(\.prompt) == ["2"])
     }
 

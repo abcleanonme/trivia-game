@@ -6,23 +6,26 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
     public let prompt: String
     public let choices: [String]
     public let correctIndex: Int
+    /// "easy", "medium" or "hard" when known.
+    public let difficulty: String?
     /// Attribution for the question's origin (e.g. "Open Trivia Database,
     /// CC BY-SA 4.0"). Shown in credits; required for OpenTDB questions.
     public let source: String?
 
     public init(id: UUID = UUID(), category: String, prompt: String, choices: [String],
-                correctIndex: Int, source: String? = nil) {
+                correctIndex: Int, difficulty: String? = nil, source: String? = nil) {
         precondition(choices.indices.contains(correctIndex), "correctIndex out of range")
         self.id = id
         self.category = category
         self.prompt = prompt
         self.choices = choices
         self.correctIndex = correctIndex
+        self.difficulty = difficulty
         self.source = source
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, category, prompt, choices, correctIndex, source
+        case id, category, prompt, choices, correctIndex, difficulty, source
     }
 
     /// Bundled JSON may omit `id`; one is generated at load time.
@@ -39,6 +42,7 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
                   prompt: try c.decode(String.self, forKey: .prompt),
                   choices: choices,
                   correctIndex: correctIndex,
+                  difficulty: try c.decodeIfPresent(String.self, forKey: .difficulty),
                   source: try c.decodeIfPresent(String.self, forKey: .source))
     }
 
@@ -53,6 +57,7 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
         return Question(id: id, category: category, prompt: prompt,
                         choices: order.map { choices[$0] },
                         correctIndex: order.firstIndex(of: correctIndex)!,
+                        difficulty: difficulty,
                         source: source)
     }
 }

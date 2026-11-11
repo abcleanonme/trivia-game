@@ -10,6 +10,7 @@ struct RoundRequest: Identifiable {
 struct HomeView: View {
     @Environment(PlayerStore.self) private var store
     @AppStorage("relaxedMode") private var relaxedMode = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var round: RoundRequest?
 
     var body: some View {
@@ -37,12 +38,16 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        HStack {
+        // Stacks at accessibility text sizes so the Sparks pill isn't squeezed.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout())
+        return layout {
             Text("Trivia\(Text(".").foregroundStyle(Theme.accent))")
                 .font(Theme.display(.largeTitle))
                 .foregroundStyle(Theme.ink)
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
+            if !typeSize.isAccessibilitySize { Spacer() }
             SparksPill(amount: store.wallet.sparks)
         }
     }
@@ -68,7 +73,7 @@ struct HomeView: View {
                     .padding(.horizontal, 28)
                     .padding(.vertical, 12)
             }
-            .buttonStyle(.chunky(fill: Theme.spark, capsule: true))
+            .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
             .padding(.top, 4)
         }
         .foregroundStyle(.white)
@@ -105,8 +110,8 @@ struct HomeView: View {
                         .foregroundStyle(Theme.ink)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Capsule().fill(Theme.card))
-                        .overlay(Capsule().stroke(Theme.line, lineWidth: 1))
+                        .background(Theme.pill.fill(Theme.card))
+                        .overlay(Theme.pill.stroke(Theme.line, lineWidth: 1))
                 }
             }
         }
@@ -137,8 +142,8 @@ struct SparksPill: View {
         .foregroundStyle(Theme.ink)
         .padding(.horizontal, 14)
         .frame(minHeight: 44)
-        .background(Capsule().fill(Theme.card))
-        .overlay(Capsule().stroke(Theme.ink, lineWidth: Theme.border))
+        .background(Theme.pill.fill(Theme.card))
+        .overlay(Theme.pill.stroke(Theme.ink, lineWidth: Theme.border))
         .accessibilityElement(children: .combine)
     }
 }

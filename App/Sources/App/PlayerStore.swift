@@ -11,7 +11,12 @@ final class PlayerStore {
     let bank: QuestionBank
 
     @ObservationIgnored private let defaults: UserDefaults
+    /// Lowercased prompts of recently dealt questions, newest last, so rounds
+    /// don't repeat until the player has seen a good chunk of the bank.
+    @ObservationIgnored private var recentPrompts: [String]
     private static let walletKey = "wallet.v1"
+    private static let recentKey = "recentPrompts.v1"
+    private static let recentLimit = 400
 
     init(defaults: UserDefaults = .standard, bank: QuestionBank = PlayerStore.loadBundledBank()) {
         self.defaults = defaults
@@ -22,11 +27,15 @@ final class PlayerStore {
         } else {
             wallet = .starter
         }
+        recentPrompts = defaults.stringArray(forKey: Self.recentKey) ?? []
     }
 
     /// A fresh classic round, optionally limited to one category.
     func newSession(category: String?, relaxed: Bool) -> GameSession {
-        let round = bank.dealRound(category: category)
+        let round = bank.dealRound(category: category, avoiding: Set(recentPrompts))
+        recentPrompts.append(contentsOf: round.questions.map { $0.prompt.lowercased() })
+        recentPrompts = Array(recentPrompts.suffix(Self.recentLimit))
+        defaults.set(recentPrompts, forKey: Self.recentKey)
         return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
     }
 
@@ -51,13 +60,18 @@ final class PlayerStore {
         }
     }
 
+    /// Bundled question files: our own reviewed questions, then the Open
+    /// Trivia DB seed (CC BY-SA 4.0, kept in its own file; see Credits).
+    nonisolated static let bundledBankFiles = ["originals", "opentdb"]
+
     nonisolated static func loadBundledBank() -> QuestionBank {
-        guard let url = Bundle.main.url(forResource: "questions", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let bank = try? QuestionBank(jsonData: data) else {
-            return QuestionBank(questions: Question.samples)
+        let banks = bundledBankFiles.compactMap { name -> QuestionBank? in
+            guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return try? QuestionBank(jsonData: data)
         }
-        return bank
+        let merged = QuestionBank(merging: banks)
+        return merged.questions.isEmpty ? QuestionBank(questions: Question.samples) : merged
     }
 
     static var preview: PlayerStore {

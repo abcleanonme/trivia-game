@@ -44,9 +44,26 @@ See [docs/iphone-duo.md](docs/iphone-duo.md). Short version: stay resizable,
 lay out from size classes and local geometry only, use system containers, and
 test every pose in Xcode's Device Hub.
 
+## Question bank
+
+About 4,500 questions ship in the app: our own (`originals.json`) plus a seed
+from the Open Trivia Database (`opentdb.json`, CC BY-SA 4.0, credited in
+Settings > Credits). See [docs/question-bank.md](docs/question-bank.md).
+
+## TestFlight
+
+```sh
+scripts/testflight.sh
+```
+
+Archives with automatic signing (team 433TNCP697, bundle ID
+`com.abcapps.trivia`) and uploads to App Store Connect. The app record must
+exist in App Store Connect first; see the comments in the script.
+
 ## Roadmap
-- [ ] Question bank (bundled JSON + categories)
-- [ ] Timed rounds, streaks, haptics
+- [x] Question bank (bundled JSON + categories)
+- [x] Timed rounds, streaks, power-ups, haptics
+- [ ] Sparks shop for power-ups
 - [ ] Game Center sign-in, leaderboards
 - [ ] Real-time and turn-based multiplayer
 - [ ] Duo: fold-aware layout, side-by-side scoreboard

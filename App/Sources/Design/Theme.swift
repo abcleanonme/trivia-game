@@ -14,12 +14,17 @@ enum Theme {
     static let disabled = Color(light: 0xEEEDE7, dark: 0x1B1B26)
     static let accent = Color(light: 0x3B5BFD, dark: 0x5B76FF)
     static let spark = Color(light: 0xFFC93C, dark: 0xFFC93C)
+    /// Text and icons on Spark yellow stay dark in both modes.
+    static let onSpark = Color(light: 0x17172B, dark: 0x17172B)
     /// Correct and wrong stay the same everywhere (design guardrail) and are
     /// always paired with an icon and text, never color alone.
     static let correct = Color(light: 0x15803D, dark: 0x15803D)
     static let wrong = Color(light: 0xC2410C, dark: 0xC2410C)
 
     static let corner: CGFloat = 18
+    /// Looks like a capsule on one line, but stays a rounded rectangle (not
+    /// an oval) when large text wraps onto several lines.
+    static let pill = RoundedRectangle(cornerRadius: 26, style: .continuous)
     static let border: CGFloat = 2
 
     /// Display face. The mockups use Space Grotesk; until we bundle it we use
@@ -75,7 +80,7 @@ extension ButtonStyle where Self == ChunkyButtonStyle {
 
     static func chunky(fill: Color, foreground: Color = Theme.ink, capsule: Bool = false) -> ChunkyButtonStyle {
         ChunkyButtonStyle(fill: fill, foreground: foreground,
-                          shape: capsule ? AnyShape(Capsule()) : AnyShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)))
+                          shape: capsule ? AnyShape(Theme.pill) : AnyShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)))
     }
 }
 

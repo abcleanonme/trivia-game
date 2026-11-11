@@ -32,58 +32,68 @@ struct QuizView: View {
 
     var body: some View {
         if let question = session.currentQuestion {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    topBar
-                    HStack {
-                        CategoryChip(name: question.category)
-                        Spacer()
-                        ClockView(session: session)
-                    }
-                    Text(question.prompt)
-                        .font(Theme.display(.title))
-                        .foregroundStyle(Theme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-                        .accessibilityAddTraits(.isHeader)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        topBar
+                        rowLayout {
+                            CategoryChip(name: question.category)
+                            if !typeSize.isAccessibilitySize { Spacer() }
+                            ClockView(session: session)
+                        }
+                        Text(question.prompt)
+                            .font(Theme.display(.title))
+                            .foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                            .accessibilityAddTraits(.isHeader)
+                            .id(question.id)
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(question.choices.indices, id: \.self) { i in
+                                AnswerButton(letter: Self.letters[i],
+                                             title: question.choices[i],
+                                             style: style(for: i, in: question)) {
+                                    onAnswer(i)
+                                }
+                            }
+                        }
+                        // Fresh views per question, so old answers never crossfade
+                        // into the new ones.
                         .id(question.id)
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(question.choices.indices, id: \.self) { i in
-                            AnswerButton(letter: Self.letters[i],
-                                         title: question.choices[i],
-                                         style: style(for: i, in: question)) {
-                                onAnswer(i)
+                        // At accessibility text sizes the bar is too tall to pin
+                        // over the question, so it scrolls with the content.
+                        if inlineBottomBar {
+                            bottomBar.id(Self.bottomBarID)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: 760)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: lastResult == nil) { _, waiting in
+                    if inlineBottomBar {
+                        withAnimation {
+                            if waiting {
+                                proxy.scrollTo(question.id, anchor: .top)
+                            } else {
+                                proxy.scrollTo(Self.bottomBarID, anchor: .bottom)
                             }
                         }
                     }
-                    // Fresh views per question, so old answers never crossfade
-                    // into the new ones.
-                    .id(question.id)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .safeAreaInset(edge: .bottom) {
-                Group {
-                    if let lastResult {
-                        FeedbackBar(result: lastResult,
-                                    isLast: session.isLastQuestion,
-                                    secondChance: secondChanceOffer,
-                                    onSecondChance: { onPowerUp(.secondChance) },
-                                    onNext: onNext)
-                    } else {
-                        PowerUpTray(session: session, stock: stock, onUse: onPowerUp)
-                    }
+                if !inlineBottomBar {
+                    bottomBar
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: 760)
+                        .frame(maxWidth: .infinity)
+                        .background(Theme.paper)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
-                .background(Theme.paper)
             }
             .sensoryFeedback(trigger: session.results.count) { old, new in
                 guard hapticsEnabled, new > old, let r = session.results.last else { return nil }
@@ -95,6 +105,29 @@ struct QuizView: View {
             } message: {
                 Text("You won't earn Sparks for this round. Power-ups you used are spent.")
             }
+        }
+    }
+
+    private static let bottomBarID = "bottomBar"
+
+    private var inlineBottomBar: Bool { typeSize.isAccessibilitySize }
+
+    /// Side by side normally; stacked when large text would squash it.
+    private var rowLayout: AnyLayout {
+        typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout())
+    }
+
+    @ViewBuilder private var bottomBar: some View {
+        if let lastResult {
+            FeedbackBar(result: lastResult,
+                        isLast: session.isLastQuestion,
+                        secondChance: secondChanceOffer,
+                        onSecondChance: { onPowerUp(.secondChance) },
+                        onNext: onNext)
+        } else {
+            PowerUpTray(session: session, stock: stock, onUse: onPowerUp)
         }
     }
 
@@ -111,15 +144,17 @@ struct QuizView: View {
             Button { confirmingQuit = true } label: {
                 Image(systemName: "xmark")
                     .font(.body.weight(.bold))
+                    // The 44pt circle is fixed, so keep the glyph inside it.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.chunky(fill: Theme.card, capsule: true))
             .accessibilityLabel("Quit round")
 
             VStack(spacing: 6) {
-                HStack {
+                rowLayout {
                     Text("Question \(session.index + 1) of \(session.questions.count)")
-                    Spacer()
+                    if !typeSize.isAccessibilitySize { Spacer() }
                     Label("Streak \(session.streak)", systemImage: "flame.fill")
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(session.streak >= 3 ? Theme.wrong : Theme.muted)
@@ -156,8 +191,8 @@ private struct CategoryChip: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Capsule().fill(Theme.card))
-            .overlay(Capsule().stroke(Theme.ink, lineWidth: Theme.border))
+            .background(Theme.pill.fill(Theme.card))
+            .overlay(Theme.pill.stroke(Theme.ink, lineWidth: Theme.border))
             .accessibilityLabel("Category: \(name)")
     }
 }
@@ -221,12 +256,18 @@ private struct AnswerButton: View {
     let style: Style
     let action: () -> Void
 
+    /// Grows with Dynamic Type so the letter always fits its badge.
+    @ScaledMetric(relativeTo: .headline) private var badgeSize: CGFloat = 38
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Text(letter)
                     .font(.headline)
-                    .frame(width: 38, height: 38)
+                    // The letter is a label, not content: cap it so long
+                    // answers keep the width at accessibility sizes.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    .frame(width: min(badgeSize, 56), height: min(badgeSize, 56))
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(badgeFill))
                     .foregroundStyle(badgeText)
                 Text(style == .eliminated ? "Removed" : title)
@@ -314,9 +355,11 @@ private struct PowerUpTray: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack {
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout())) {
                 SectionLabel("Power-ups")
-                Spacer()
+                if !typeSize.isAccessibilitySize { Spacer() }
                 Text("1 per question · \(limitLeft) left this round")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.muted)
@@ -334,7 +377,7 @@ private struct PowerUpTray: View {
                         .frame(maxWidth: .infinity, minHeight: 64)
                     }
                     .buttonStyle(ChunkyButtonStyle(fill: active ? Theme.spark : Theme.card,
-                                                   foreground: active ? Color(light: 0x17172B, dark: 0x17172B) : Theme.ink))
+                                                   foreground: active ? Theme.onSpark : Theme.ink))
                     .disabled(active || count == 0 || !session.canUse(p))
                     .accessibilityLabel("\(p.title), \(count) left")
                     .accessibilityHint(p.summary)
@@ -352,24 +395,27 @@ private struct FeedbackBar: View {
     let onSecondChance: () -> Void
     let onNext: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: result.correct ? "checkmark.circle.fill" : (result.timedOut ? "clock.badge.xmark" : "xmark.circle.fill"))
-                    .font(.title.bold())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.display(.title2))
-                    Text(detail).font(.subheadline)
+            if typeSize.isAccessibilitySize {
+                // Too big to sit side by side: stack, full-width Next.
+                Text(title).font(Theme.display(.title2))
+                Text(detail).font(.subheadline)
+                nextButton(fullWidth: true)
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title.bold())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(Theme.display(.title2))
+                        Text(detail).font(.subheadline)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    nextButton(fullWidth: false)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: onNext) {
-                    Text(isLast ? "Results" : "Next")
-                        .font(.headline)
-                        .padding(.horizontal, 20)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.chunky(fill: Theme.card, capsule: true))
             }
             if let secondChance {
                 Button(action: onSecondChance) {
@@ -377,13 +423,27 @@ private struct FeedbackBar: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
-                .buttonStyle(.chunky(fill: Theme.spark, foreground: Color(light: 0x17172B, dark: 0x17172B), capsule: true))
+                .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
             }
         }
         .foregroundStyle(.white)
         .padding(16)
         .card(fill: result.correct ? Theme.correct : Theme.wrong, radius: 22)
         .accessibilityElement(children: .contain)
+    }
+
+    private var icon: String {
+        result.correct ? "checkmark.circle.fill" : (result.timedOut ? "clock.badge.xmark" : "xmark.circle.fill")
+    }
+
+    private func nextButton(fullWidth: Bool) -> some View {
+        Button(action: onNext) {
+            Text(isLast ? "Results" : "Next")
+                .font(.headline)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 44)
+        }
+        .buttonStyle(.chunky(fill: Theme.card, capsule: true))
     }
 
     private var title: String {
