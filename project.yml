@@ -23,6 +23,12 @@ targets:
       - App/Resources
     dependencies:
       - package: TriviaKit
+      - sdk: GameKit.framework
+    # Game Center: friend challenges (turn-based matches).
+    entitlements:
+      path: App/Trivia.entitlements
+      properties:
+        com.apple.developer.game-center: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.abcapps.trivia

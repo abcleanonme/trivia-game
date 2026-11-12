@@ -1,7 +1,7 @@
 # Quizio - Trivia with Friends
 
 An ad-free trivia game for iPhone and iPad, built in SwiftUI, with
-multiplayer planned via Game Center.
+async "challenge a friend" multiplayer over Game Center.
 
 - **Minimum OS:** iOS 27.1
 - **Devices:** all iPhones (including full **iPhone Duo** support) and iPad
@@ -30,7 +30,7 @@ cd Packages/TriviaKit && swift test
 ```
 App/
   Sources/App/          App entry + root TabView
-  Sources/Features/     Home, Play (quiz), Multiplayer, Settings
+  Sources/Features/     Home, Play (quiz), Multiplayer (Friends: Game Center challenges), Settings
   Resources/            Asset catalog
 Packages/TriviaKit/     Pure Swift game logic (models, scoring) + tests
 docs/iphone-duo.md      iPhone Duo rules and test checklist
