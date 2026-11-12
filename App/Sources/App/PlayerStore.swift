@@ -32,11 +32,23 @@ final class PlayerStore {
 
     /// A fresh classic round, optionally limited to one category.
     func newSession(category: String?, relaxed: Bool) -> GameSession {
-        let round = bank.dealRound(category: category, avoiding: Set(recentPrompts))
+        let round = deal(category: category, reserve: GameRules.soloPowerUpsPerRound)
+        return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
+    }
+
+    /// Questions for a new friend challenge. Always timed: relaxed mode is
+    /// solo and Daily only, so both players race the same clock.
+    func newChallenge() -> ChallengeData {
+        let round = deal(category: nil, reserve: GameRules.challengePowerUpsPerRound)
+        return ChallengeData(questions: round.questions, reserve: round.reserve)
+    }
+
+    private func deal(category: String?, reserve: Int) -> (questions: [Question], reserve: [Question]) {
+        let round = bank.dealRound(reserve: reserve, category: category, avoiding: Set(recentPrompts))
         recentPrompts.append(contentsOf: round.questions.map { $0.prompt.lowercased() })
         recentPrompts = Array(recentPrompts.suffix(Self.recentLimit))
         defaults.set(recentPrompts, forKey: Self.recentKey)
-        return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
+        return round
     }
 
     /// Uses a power-up if the round rules allow it and the player has one.

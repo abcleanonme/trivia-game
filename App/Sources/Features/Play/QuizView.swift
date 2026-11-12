@@ -15,6 +15,8 @@ struct QuizView: View {
     let onPowerUp: (PowerUp) -> Void
     let onNext: () -> Void
     let onQuit: () -> Void
+    /// What quitting costs; challenges submit the score so far instead.
+    var quitMessage = "You won't earn Sparks for this round. Power-ups you used are spent."
 
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -103,7 +105,7 @@ struct QuizView: View {
                 Button("Quit round", role: .destructive, action: onQuit)
                 Button("Keep playing", role: .cancel) {}
             } message: {
-                Text("You won't earn Sparks for this round. Power-ups you used are spent.")
+                Text(quitMessage)
             }
         }
     }
