@@ -168,7 +168,7 @@ struct QuizView: View {
                 rowLayout {
                     Text("Question \(session.index + 1) of \(session.questions.count)")
                     if !typeSize.isAccessibilitySize { Spacer() }
-                    StreakBadge(streak: session.streak)
+                    InRoundStreak(streak: session.streak)
                 }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Theme.muted)
@@ -394,7 +394,7 @@ private struct AnswerButton: View {
 
 /// "Streak N" with a flame that hops each time the streak grows and keeps
 /// flickering while it's hot (3+).
-private struct StreakBadge: View {
+private struct InRoundStreak: View {
     let streak: Int
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
