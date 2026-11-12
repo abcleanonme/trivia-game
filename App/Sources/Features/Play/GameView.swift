@@ -10,7 +10,10 @@ struct GameView: View {
     @Environment(PlayerStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: GameSession?
+    /// Bumped on Play again so the quiz screen arrives fresh.
+    @State private var round = 0
 
     var body: some View {
         Group {
@@ -20,6 +23,7 @@ struct GameView: View {
                                 balance: store.wallet.sparks,
                                 onPlayAgain: start,
                                 onHome: { dismiss() })
+                        .transition(.pop(reduce: reduceMotion))
                 } else {
                     QuizView(session: session,
                              stock: { store.wallet.count(of: $0) },
@@ -27,9 +31,13 @@ struct GameView: View {
                              onPowerUp: usePowerUp,
                              onNext: { self.session?.advance() },
                              onQuit: { dismiss() })
+                        .id(round)
+                        .transition(.motion(.trailing, reduce: reduceMotion))
                 }
             }
         }
+        .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: session?.phase == .finished)
+        .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: round)
         .background(Theme.paper.ignoresSafeArea())
         .onAppear { if session == nil { start() } }
         .onChange(of: session?.phase == .finished) { _, finished in
@@ -40,6 +48,7 @@ struct GameView: View {
 
     private func start() {
         session = store.newSession(category: category, relaxed: relaxed)
+        round += 1
     }
 
     private func usePowerUp(_ powerUp: PowerUp) {
