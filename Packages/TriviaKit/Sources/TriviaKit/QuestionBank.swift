@@ -45,14 +45,21 @@ public struct QuestionBank: Sendable {
     public func dealRound(count: Int = GameRules.questionsPerRound,
                           reserve: Int = GameRules.soloPowerUpsPerRound,
                           category: String? = nil,
+                          difficulty: String? = nil,
                           avoiding recent: Set<String> = [],
                           using rng: inout some RandomNumberGenerator) -> (questions: [Question], reserve: [Question]) {
-        let eligible = questions.filter { category == nil || $0.category == category }
+        var eligible = questions.filter { category == nil || $0.category == category }
+        if let difficulty {
+            let tagged = eligible.filter { $0.difficulty == difficulty }
+            // A tiny pool (e.g. a category with few hard ones) falls back to all.
+            if tagged.count >= count + reserve || tagged.count >= GameRules.questionsPerRound { eligible = tagged }
+        }
         let isRecent = { (q: Question) in recent.contains(q.prompt.lowercased()) }
         let fresh = eligible.filter { !isRecent($0) }.shuffled(using: &rng)
         let stale = eligible.filter(isRecent).shuffled(using: &rng)
         let ordered = Self.balanced(fresh + stale, take: count + reserve,
-                                    maxPerCategory: category == nil ? Self.maxPerCategoryInMix : nil)
+                                    maxPerCategory: category == nil ? Self.maxPerCategoryInMix : nil,
+                                    maxHard: difficulty == nil ? Self.maxHardPerRound : nil)
         let picked = ordered.map { $0.shufflingChoices(using: &rng) }
         let main = Array(picked.prefix(count))
         let spare = Array(picked.dropFirst(main.count))
@@ -67,7 +74,12 @@ public struct QuestionBank: Sendable {
 
     /// Takes questions in order, skipping ones that would break the category
     /// or difficulty caps; if that leaves too few, fills up with the skipped ones.
-    static func balanced(_ candidates: [Question], take: Int, maxPerCategory: Int?) -> [Question] {
+    static func balanced(_ candidates: [Question], take: Int, maxPerCategory: Int?,
+                         maxHard: Int? = maxHardPerRound) -> [Question] {
+        // Long rounds (Survival, Speed) scale the caps with their length.
+        let scale = max(1, take / (GameRules.questionsPerRound + GameRules.soloPowerUpsPerRound))
+        let maxPerCategory = maxPerCategory.map { $0 * scale }
+        let maxHard = maxHard.map { $0 * scale }
         var picked: [Question] = []
         var skipped: [Question] = []
         var perCategory: [String: Int] = [:]
@@ -78,7 +90,7 @@ public struct QuestionBank: Sendable {
             if let maxPerCategory, perCategory[q.category, default: 0] >= maxPerCategory {
                 skipped.append(q); continue
             }
-            if isHard && hard >= maxHardPerRound {
+            if isHard, let maxHard, hard >= maxHard {
                 skipped.append(q); continue
             }
             picked.append(q)
@@ -94,8 +106,10 @@ public struct QuestionBank: Sendable {
     public func dealRound(count: Int = GameRules.questionsPerRound,
                           reserve: Int = GameRules.soloPowerUpsPerRound,
                           category: String? = nil,
+                          difficulty: String? = nil,
                           avoiding recent: Set<String> = []) -> (questions: [Question], reserve: [Question]) {
         var rng = SystemRandomNumberGenerator()
-        return dealRound(count: count, reserve: reserve, category: category, avoiding: recent, using: &rng)
+        return dealRound(count: count, reserve: reserve, category: category, difficulty: difficulty,
+                         avoiding: recent, using: &rng)
     }
 }

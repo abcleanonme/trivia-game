@@ -1,15 +1,11 @@
 import SwiftUI
 import TriviaKit
 
-/// A round the player asked to start. Identifiable so it can drive a cover.
-struct RoundRequest: Identifiable {
-    let id = UUID()
-    let category: String?
-}
-
 struct HomeView: View {
     @Environment(PlayerStore.self) private var store
     @AppStorage("relaxedMode") private var relaxedMode = false
+    @AppStorage("gameMode") private var mode: GameMode = .classic
+    @AppStorage("difficulty") private var difficulty: Difficulty = .mixed
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var round: RoundRequest?
 
@@ -17,7 +13,9 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                DailyHomeCard { round = RoundRequest(kind: .daily(store.today)) }
                 classicCard
+                EventHomeCard { event, week in round = RoundRequest(kind: .event(event, week: week)) }
                 categories
                 powerUps
                 Text("No ads. Ever.")
@@ -33,7 +31,7 @@ struct HomeView: View {
         .background(Theme.paper)
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $round) { request in
-            GameView(category: request.category, relaxed: relaxedMode)
+            GameView(request: request, relaxed: relaxedMode)
         }
     }
 
@@ -54,19 +52,28 @@ struct HomeView: View {
 
     private var classicCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(relaxedMode ? "Classic · Relaxed" : "Classic")
+            Text(relaxedApplies ? "\(mode.title) · Relaxed" : mode.title)
                 .font(.footnote.weight(.semibold))
                 .textCase(.uppercase)
                 .kerning(1)
                 .opacity(0.9)
-            Text("10 questions.\nMixed bag.")
+            Text(headline)
                 .font(Theme.display(.largeTitle))
-            Text(relaxedMode ? "No clock. Take your time, still earn Sparks."
-                             : "Answer fast, build a streak, earn Sparks.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text(relaxedApplies ? "No clock. Take your time, still earn Sparks." : subtitle)
                 .font(.subheadline)
                 .opacity(0.92)
+            OptionRow(label: "Mode", options: GameMode.allCases, selection: $mode, title: \.title)
+            OptionRow(label: "Difficulty", options: Difficulty.allCases, selection: $difficulty, title: \.title)
+            Toggle(isOn: $relaxedMode) {
+                Label("Relaxed (no timer)", systemImage: "leaf")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .tint(Theme.spark)
+            .disabled(!mode.supportsRelaxed)
+            .opacity(mode.supportsRelaxed ? 1 : 0.6)
             Button {
-                round = RoundRequest(category: nil)
+                round = request(category: nil)
             } label: {
                 Text("Play")
                     .font(.title3.bold())
@@ -84,19 +91,44 @@ struct HomeView: View {
 
     private var categories: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("Pick a category")
+            SectionLabel("Category focus")
+            Text("A whole \(mode.title.lowercased()) round from one category. Builds its mastery level.")
+                .font(.footnote)
+                .foregroundStyle(Theme.muted)
             FlowLayout(spacing: 8) {
                 ForEach(store.bank.categories, id: \.self) { category in
-                    Button { round = RoundRequest(category: category) } label: {
+                    Button { round = request(category: category) } label: {
                         Text(category)
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 16)
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.chunky(fill: Theme.card, capsule: true))
-                        .accessibilityHint("Starts a round of \(category) questions")
+                        .accessibilityHint("Starts a \(mode.title) round of \(category) questions")
                 }
             }
+        }
+    }
+
+    private func request(category: String?) -> RoundRequest {
+        RoundRequest(kind: .solo(mode: mode, category: category, difficulty: difficulty))
+    }
+
+    private var relaxedApplies: Bool { relaxedMode && mode.supportsRelaxed }
+
+    private var headline: String {
+        switch mode {
+        case .classic: "10 questions.\n\(difficulty == .mixed ? "Mixed bag." : "\(difficulty.title) ones.")"
+        case .survival: "Three lives.\nHow far can you go?"
+        case .speed: "60 seconds.\nGo go go."
+        }
+    }
+
+    private var subtitle: String {
+        switch mode {
+        case .classic: "Answer fast, build a streak, earn Sparks."
+        case .survival: "Every miss costs a life. Streaks still multiply."
+        case .speed: "No stopping between questions. Relaxed doesn't apply here."
         }
     }
 
@@ -115,6 +147,40 @@ struct HomeView: View {
                 }
             }
         }
+    }
+}
+
+/// A labeled row of pill choices on the accent card.
+private struct OptionRow<Option: Hashable>: View {
+    let label: String
+    let options: [Option]
+    @Binding var selection: Option
+    let title: KeyPath<Option, String>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.caption.weight(.bold))
+                .textCase(.uppercase)
+                .kerning(1)
+                .opacity(0.85)
+            FlowLayout(spacing: 6) {
+                ForEach(options, id: \.self) { option in
+                    let on = option == selection
+                    Button { selection = option } label: {
+                        Text(option[keyPath: title])
+                            .font(.subheadline.weight(.bold))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 40)
+                    }
+                    .buttonStyle(.chunky(fill: on ? Theme.card : Theme.accent,
+                                         foreground: on ? Theme.ink : .white, capsule: true))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
     }
 }
 

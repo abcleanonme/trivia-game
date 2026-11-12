@@ -2,12 +2,38 @@ import Foundation
 import Observation
 import TriviaKit
 
-/// App-wide player state: the Sparks wallet, power-up stock, and the
+/// What the player asked to play. Identifiable so it can drive a cover.
+struct RoundRequest: Identifiable {
+    enum Kind {
+        case solo(mode: GameMode, category: String?, difficulty: Difficulty)
+        /// The Daily for this date (fixed when the round starts, so a round
+        /// that runs past midnight still counts for the day it began).
+        case daily(Day)
+        case event(WeeklyEvent, week: Int)
+    }
+
+    let id = UUID()
+    let kind: Kind
+
+    static func classic(category: String?) -> RoundRequest {
+        RoundRequest(kind: .solo(mode: .classic, category: category, difficulty: .mixed))
+    }
+
+    var isDaily: Bool { if case .daily = kind { true } else { false } }
+
+    var mode: GameMode {
+        if case .solo(let mode, _, _) = kind { mode } else { .classic }
+    }
+}
+
+/// App-wide player state: the Sparks wallet, power-up stock, long-term
+/// progress (Daily, mastery, events, cosmetics, Player Card), and the
 /// question bank. Saved locally for now; moves to iCloud/Game Center later.
 @MainActor
 @Observable
 final class PlayerStore {
     private(set) var wallet: Wallet
+    private(set) var progress: PlayerProgress
     let bank: QuestionBank
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -15,6 +41,7 @@ final class PlayerStore {
     /// don't repeat until the player has seen a good chunk of the bank.
     @ObservationIgnored private var recentPrompts: [String]
     private static let walletKey = "wallet.v1"
+    private static let progressKey = "progress.v1"
     private static let recentKey = "recentPrompts.v1"
     private static let recentLimit = 400
 
@@ -28,15 +55,125 @@ final class PlayerStore {
             wallet = .starter
         }
         recentPrompts = defaults.stringArray(forKey: Self.recentKey) ?? []
+        if let data = defaults.data(forKey: Self.progressKey),
+           let saved = try? JSONDecoder().decode(PlayerProgress.self, from: data) {
+            progress = saved
+        } else {
+            progress = PlayerProgress()
+        }
     }
 
-    /// A fresh classic round, optionally limited to one category.
-    func newSession(category: String?, relaxed: Bool) -> GameSession {
-        let round = bank.dealRound(category: category, avoiding: Set(recentPrompts))
-        recentPrompts.append(contentsOf: round.questions.map { $0.prompt.lowercased() })
+    // MARK: Today
+
+    /// Read fresh each time so the Daily and event roll over at local midnight.
+    var today: Day { Day.today() }
+    var currentEvent: WeeklyEvent { WeeklyEvent.event(on: today) }
+    var currentEventProgress: EventProgress {
+        progress.eventProgress(currentEvent, week: today.weekIndex)
+    }
+    var todaysDaily: DailyRecord? { progress.dailies[today] }
+    var dailyStreak: Int { progress.streak.current(on: today) }
+
+    // MARK: Rounds
+
+    /// Deals the round for a request. Returns nil if today's Daily was
+    /// already played (one attempt per day).
+    func newSession(for request: RoundRequest, relaxed: Bool) -> GameSession? {
+        switch request.kind {
+        case .solo(let mode, let category, let difficulty):
+            let round = bank.dealRound(count: mode.questionCount, category: category,
+                                       difficulty: difficulty.tag, avoiding: Set(recentPrompts))
+            remember(round.questions.prefix(GameRules.questionsPerRound))
+            return GameSession(questions: round.questions, reserve: round.reserve,
+                               isTimed: !(relaxed && mode.supportsRelaxed), mode: mode)
+        case .daily(let day):
+            guard progress.beginDaily(on: day, relaxed: relaxed) else { return nil }
+            saveProgress()
+            let round = DailyChallenge.round(for: day, from: bank)
+            return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
+        case .event(let event, _):
+            let round = event.pool(from: bank).dealRound(avoiding: Set(recentPrompts))
+            remember(round.questions[...])
+            return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
+        }
+    }
+
+    /// Credits a round (finished, or left early) and pays out its Sparks.
+    @discardableResult
+    func finish(_ session: GameSession, for request: RoundRequest, finished: Bool = true) -> RoundRewards {
+        let kind: RoundKind = switch request.kind {
+        case .solo: .solo
+        case .daily(let day): .daily(day)
+        case .event(let event, let week): .event(event, week: week)
+        }
+        let rewards = progress.record(session, kind: kind, finished: finished)
+        wallet.earn(sparks: rewards.sparks)
+        save()
+        saveProgress()
+        return rewards
+    }
+
+    private func remember(_ questions: ArraySlice<Question>) {
+        recentPrompts.append(contentsOf: questions.map { $0.prompt.lowercased() })
         recentPrompts = Array(recentPrompts.suffix(Self.recentLimit))
         defaults.set(recentPrompts, forKey: Self.recentKey)
-        return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
+    }
+
+    // MARK: Style and Player Card
+
+    @discardableResult
+    func buy(_ cosmetic: Cosmetic) -> Bool {
+        guard progress.inventory.buy(cosmetic.id, with: &wallet) else { return false }
+        progress.inventory.equip(cosmetic.id)
+        save()
+        saveProgress()
+        return true
+    }
+
+    func equip(_ cosmetic: Cosmetic) {
+        progress.inventory.equip(cosmetic.id)
+        saveProgress()
+    }
+
+    func updateCard(_ change: (inout PlayerCard) -> Void) {
+        change(&progress.card)
+        progress.card.name = String(progress.card.name.prefix(PlayerCard.maxNameLength))
+        saveProgress()
+    }
+
+    // MARK: Questions from players
+
+    func submit(_ submission: QuestionSubmission) {
+        progress.submit(submission)
+        saveProgress()
+    }
+
+    func report(_ question: Question, reason: QuestionReport.Reason) {
+        progress.reports.append(QuestionReport(question: question, reason: reason))
+        saveProgress()
+    }
+
+    /// Applies a moderation decision once a review service reports one.
+    func applyReview(_ id: UUID, status: QuestionSubmission.Status) {
+        wallet.earn(sparks: progress.updateSubmission(id, to: status))
+        save()
+        saveProgress()
+    }
+
+    // MARK: Friends
+
+    /// For the multiplayer layer: record a finished friend match.
+    @discardableResult
+    func recordMatch(_ outcome: MatchOutcome, against friendID: String, name: String) -> [Stamp] {
+        let stamps = progress.recordMatch(outcome, against: friendID, name: name)
+        saveProgress()
+        return stamps
+    }
+
+    private func saveProgress() {
+        if let data = try? JSONEncoder().encode(progress) {
+            defaults.set(data, forKey: Self.progressKey)
+        }
     }
 
     /// Uses a power-up if the round rules allow it and the player has one.
