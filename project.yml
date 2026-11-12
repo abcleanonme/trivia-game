@@ -1,16 +1,16 @@
 # Generate the Xcode project with: xcodegen generate
 name: Trivia
 options:
-  bundleIdPrefix: com.example.trivia
+  bundleIdPrefix: com.abcapps
   deploymentTarget:
-    iOS: "27.1"
+    iOS: "18.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "4"
 packages:
   TriviaKit:
     path: Packages/TriviaKit
@@ -25,15 +25,25 @@ targets:
       - package: TriviaKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.trivia.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.abcapps.trivia
+        # Same Apple Developer team as Huntdeer; Xcode manages signing.
+        DEVELOPMENT_TEAM: 433TNCP697
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Trivia
+        INFOPLIST_KEY_CFBundleDisplayName: Quizio
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # Must stay resizable for iPhone Duo: do NOT set UIRequiresFullScreen.
         INFOPLIST_KEY_UIApplicationSupportsMultipleScenes: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown"
+        # Portrait on regular iPhones (and the Duo outer display); every
+        # orientation on iPad. The Duo inner display ignores this because the
+        # app stays resizable.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.trivia-games
+        # No custom encryption: skips the export-compliance question on upload.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES

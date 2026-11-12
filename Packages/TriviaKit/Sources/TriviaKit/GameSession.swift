@@ -1,38 +1,194 @@
 import Foundation
 
-/// Pure game logic for a single round. Shared by solo and multiplayer modes.
+/// The outcome of one question.
+public struct QuestionResult: Equatable, Sendable {
+    public let question: Question
+    /// nil when the clock ran out.
+    public let choice: Int?
+    public let correct: Bool
+    /// Seconds left when answered (nil in relaxed mode).
+    public let timeRemaining: Double?
+    public let powerUp: PowerUp?
+    public let breakdown: ScoreBreakdown
+    /// Streak after this answer.
+    public let streak: Int
+
+    public var points: Int { breakdown.total }
+    public var timedOut: Bool { choice == nil }
+}
+
+/// Pure game logic for one classic round. Shared by solo and (later)
+/// multiplayer modes, and fully unit-testable: the clock only moves when the
+/// UI calls `tick(by:)`, so tests drive time directly.
 public struct GameSession: Sendable {
-    public enum State: Equatable, Sendable {
-        case asking(index: Int)
-        case answered(index: Int, choice: Int, correct: Bool)
+    public enum Phase: Equatable, Sendable {
+        case asking
+        case answered(QuestionResult)
         case finished
     }
 
-    public let questions: [Question]
-    public private(set) var state: State
-    public private(set) var score: Int = 0
+    public private(set) var questions: [Question]
+    /// Spare questions that `.skip` swaps in.
+    public private(set) var reserve: [Question]
+    public private(set) var index = 0
+    public private(set) var phase: Phase
+    /// False in relaxed mode: no clock, no speed bonus.
+    public let isTimed: Bool
+    public let powerUpLimit: Int
 
-    public init(questions: [Question]) {
+    public private(set) var timeRemaining: Double
+    public private(set) var streak = 0
+    public private(set) var bestStreak = 0
+    public private(set) var results: [QuestionResult] = []
+    /// Choices hidden by 50/50 or by a missed first try.
+    public private(set) var eliminated: Set<Int> = []
+    public private(set) var powerUpThisQuestion: PowerUp?
+    public private(set) var powerUpsUsed = 0
+
+    /// Streak before the last miss, so second chance can restore it.
+    private var streakBeforeMiss: Int?
+
+    public init(questions: [Question],
+                reserve: [Question] = [],
+                isTimed: Bool = true,
+                powerUpLimit: Int = GameRules.soloPowerUpsPerRound) {
         self.questions = questions
-        self.state = questions.isEmpty ? .finished : .asking(index: 0)
+        self.reserve = reserve
+        self.isTimed = isTimed
+        self.powerUpLimit = powerUpLimit
+        self.timeRemaining = GameRules.questionTime
+        self.phase = questions.isEmpty ? .finished : .asking
     }
 
+    // MARK: Reading
+
     public var currentQuestion: Question? {
-        switch state {
-        case .asking(let i), .answered(let i, _, _): questions[i]
-        case .finished: nil
-        }
+        phase == .finished ? nil : questions[index]
+    }
+
+    public var totalPoints: Int { results.reduce(0) { $0 + $1.points } }
+    public var correctCount: Int { results.filter(\.correct).count }
+    public var sparksEarned: Int { Scoring.sparks(forPoints: totalPoints) }
+    public var breakdown: ScoreBreakdown { results.reduce(.zero) { $0 + $1.breakdown } }
+    public var isLastQuestion: Bool { index == questions.count - 1 }
+
+    // MARK: Playing
+
+    /// Advances the clock. Times out the question when it reaches zero.
+    public mutating func tick(by seconds: Double) {
+        guard isTimed, phase == .asking else { return }
+        timeRemaining = max(timeRemaining - seconds, 0)
+        if timeRemaining == 0 { resolve(choice: nil) }
     }
 
     public mutating func answer(_ choice: Int) {
-        guard case .asking(let i) = state else { return }
-        let correct = questions[i].isCorrect(choice)
-        if correct { score += 1 }
-        state = .answered(index: i, choice: choice, correct: correct)
+        guard phase == .asking,
+              let q = currentQuestion,
+              q.choices.indices.contains(choice),
+              !eliminated.contains(choice) else { return }
+        resolve(choice: choice)
     }
 
     public mutating func advance() {
-        guard case .answered(let i, _, _) = state else { return }
-        state = i + 1 < questions.count ? .asking(index: i + 1) : .finished
+        guard case .answered = phase else { return }
+        streakBeforeMiss = nil
+        if index + 1 < questions.count {
+            index += 1
+            startQuestion()
+        } else {
+            phase = .finished
+        }
+    }
+
+    // MARK: Power-ups
+
+    public func canUse(_ powerUp: PowerUp) -> Bool {
+        guard powerUpThisQuestion == nil, powerUpsUsed < powerUpLimit else { return false }
+        switch powerUp {
+        case .secondChance:
+            // Only after a real miss with time still on the clock.
+            guard case .answered(let r) = phase else { return false }
+            return !r.correct && !r.timedOut && (!isTimed || timeRemaining > 0)
+        case .skip:
+            return phase == .asking && !reserve.isEmpty
+        case .fiftyFifty:
+            return phase == .asking && wrongChoicesLeft.count >= 2
+        case .extraTime:
+            return phase == .asking && isTimed
+        case .doubleDown:
+            return phase == .asking
+        }
+    }
+
+    /// Applies a power-up. Returns false (and changes nothing) if it can't be
+    /// used right now. The caller is responsible for taking it out of stock.
+    @discardableResult
+    public mutating func use(_ powerUp: PowerUp) -> Bool {
+        var rng = SystemRandomNumberGenerator()
+        return use(powerUp, using: &rng)
+    }
+
+    @discardableResult
+    public mutating func use(_ powerUp: PowerUp, using rng: inout some RandomNumberGenerator) -> Bool {
+        guard canUse(powerUp) else { return false }
+        powerUpsUsed += 1
+        powerUpThisQuestion = powerUp
+        switch powerUp {
+        case .fiftyFifty:
+            eliminated.formUnion(wrongChoicesLeft.shuffled(using: &rng).prefix(2))
+        case .extraTime:
+            timeRemaining += GameRules.extraTimeSeconds
+        case .doubleDown:
+            break
+        case .skip:
+            questions[index] = reserve.removeFirst()
+            startQuestion()
+            // A fresh question gets a fresh power-up slot; the round limit
+            // still counts the skip.
+            powerUpThisQuestion = nil
+        case .secondChance:
+            guard case .answered(let missed) = phase else { return false }
+            results.removeLast()
+            if let choice = missed.choice { eliminated.insert(choice) }
+            streak = streakBeforeMiss ?? streak
+            streakBeforeMiss = nil
+            phase = .asking
+        }
+        return true
+    }
+
+    // MARK: Private
+
+    private var wrongChoicesLeft: [Int] {
+        guard let q = currentQuestion else { return [] }
+        return q.choices.indices.filter { !q.isCorrect($0) && !eliminated.contains($0) }
+    }
+
+    private mutating func startQuestion() {
+        timeRemaining = GameRules.questionTime
+        eliminated = []
+        powerUpThisQuestion = nil
+        phase = .asking
+    }
+
+    private mutating func resolve(choice: Int?) {
+        let q = questions[index]
+        let correct = choice.map(q.isCorrect) ?? false
+        let clock: Double? = isTimed ? timeRemaining : nil
+        let breakdown: ScoreBreakdown
+        if correct {
+            streak += 1
+            bestStreak = max(bestStreak, streak)
+            breakdown = Scoring.breakdown(timeRemaining: clock, streak: streak, powerUp: powerUpThisQuestion)
+        } else {
+            streakBeforeMiss = streak
+            streak = 0
+            breakdown = .zero
+        }
+        let result = QuestionResult(question: q, choice: choice, correct: correct,
+                                    timeRemaining: clock, powerUp: powerUpThisQuestion,
+                                    breakdown: breakdown, streak: streak)
+        results.append(result)
+        phase = .answered(result)
     }
 }
