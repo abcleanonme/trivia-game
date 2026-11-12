@@ -8,7 +8,10 @@ private func q(_ n: Int) -> Question {
 
 private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn {
     ChallengeTurn(playerID: id, points: points, correctCount: correct, bestStreak: 2,
-                  answers: Array(repeating: true, count: correct))
+                  answers: Array(repeating: true, count: correct),
+                  // Whole seconds: match data stores dates as seconds, so a
+                  // fractional Date() wouldn't compare equal after decoding.
+                  playedAt: Date(timeIntervalSince1970: 1_800_000_000))
 }
 
 @Suite struct ChallengeDataTests {
@@ -112,9 +115,9 @@ private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn 
     }
 }
 
-@Suite struct RivalryBookTests {
+@Suite struct ChallengeRivalryBookTests {
     @Test func countsEachMatchOnce() {
-        var book = RivalryBook()
+        var book = ChallengeRivalryBook()
         let first = book.add(.won, matchID: "m1", opponentID: "alex", opponentName: "Alex")
         #expect(first)
         let again = book.add(.won, matchID: "m1", opponentID: "alex", opponentName: "Alex")
@@ -124,7 +127,7 @@ private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn 
     }
 
     @Test func keepsARunningRecord() {
-        var book = RivalryBook()
+        var book = ChallengeRivalryBook()
         book.add(.won, matchID: "m1", opponentID: "alex", opponentName: "Alex")
         book.add(.won, matchID: "m2", opponentID: "alex", opponentName: "Alex")
         book.add(.lost, matchID: "m3", opponentID: "alex", opponentName: "Alex G")
@@ -137,7 +140,7 @@ private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn 
     }
 
     @Test func rivalsSortMostRecentFirst() {
-        var book = RivalryBook()
+        var book = ChallengeRivalryBook()
         book.add(.won, matchID: "m1", opponentID: "old", opponentName: "Old",
                  playedAt: Date(timeIntervalSince1970: 100))
         book.add(.lost, matchID: "m2", opponentID: "new", opponentName: "New",
@@ -146,9 +149,9 @@ private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn 
     }
 
     @Test func survivesSaving() throws {
-        var book = RivalryBook()
+        var book = ChallengeRivalryBook()
         book.add(.won, matchID: "m1", opponentID: "alex", opponentName: "Alex")
-        let decoded = try JSONDecoder().decode(RivalryBook.self, from: JSONEncoder().encode(book))
+        let decoded = try JSONDecoder().decode(ChallengeRivalryBook.self, from: JSONEncoder().encode(book))
         #expect(decoded == book)
         var copy = decoded
         let added = copy.add(.won, matchID: "m1", opponentID: "alex", opponentName: "Alex")

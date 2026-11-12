@@ -61,7 +61,7 @@ final class GameCenter: NSObject {
 
     private(set) var auth: Auth = .checking
     private(set) var challenges: [ChallengeItem] = []
-    private(set) var rivalries: RivalryBook
+    private(set) var rivalries: ChallengeRivalryBook
     private(set) var isLoading = false
     /// Drives the full-screen challenge cover.
     var activeRound: ChallengeRound?
@@ -80,10 +80,10 @@ final class GameCenter: NSObject {
         self.defaults = defaults
         self.isDemo = demo
         if let data = defaults.data(forKey: Self.rivalriesKey),
-           let saved = try? JSONDecoder().decode(RivalryBook.self, from: data) {
+           let saved = try? JSONDecoder().decode(ChallengeRivalryBook.self, from: data) {
             rivalries = saved
         } else {
-            rivalries = RivalryBook()
+            rivalries = ChallengeRivalryBook()
         }
         super.init()
         if demo { loadDemo() }
@@ -490,7 +490,7 @@ private extension GameCenter {
             ChallengeItem(id: "d5", opponentID: "sam", opponentName: "Sam", status: .finished(.lost),
                           myPoints: 870, theirPoints: 1_190, updated: now.addingTimeInterval(-172_800)),
         ]
-        var book = RivalryBook()
+        var book = ChallengeRivalryBook()
         for (i, (id, name, outcome)) in [("maya", "Maya", ChallengeOutcome.won), ("maya", "Maya", .won),
                                          ("maya", "Maya", .lost), ("sam", "Sam", .lost),
                                          ("jordan", "Jordan", .tied)].enumerated() {

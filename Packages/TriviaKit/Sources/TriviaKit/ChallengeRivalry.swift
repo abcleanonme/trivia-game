@@ -28,7 +28,7 @@ public struct HeadToHead: Codable, Equatable, Sendable {
 /// Head-to-head records against every friend you've finished a challenge
 /// with. Each match counts once, however many times it's seen, because Game
 /// Center hands back the same finished matches on every refresh.
-public struct RivalryBook: Codable, Equatable, Sendable {
+public struct ChallengeRivalryBook: Codable, Equatable, Sendable {
     public private(set) var records: [String: HeadToHead] = [:]
     private var countedMatchIDs: Set<String> = []
 
