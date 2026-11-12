@@ -12,8 +12,6 @@
 	<string>automatic</string>
 	<key>manageAppVersionAndBuildNumber</key>
 	<true/>
-	<key>testFlightInternalTestingOnly</key>
-	<true/>
 	<key>uploadSymbols</key>
 	<true/>
 </dict>
