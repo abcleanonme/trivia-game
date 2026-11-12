@@ -291,3 +291,18 @@ struct FloatingCallout: View {
             }
     }
 }
+
+// MARK: - Symbol draw-on
+
+extension View {
+    /// Draws a symbol in as it appears (iOS 26+), or uses the older
+    /// appear effect on earlier systems.
+    @ViewBuilder
+    func drawOnTransition() -> some View {
+        if #available(iOS 26.0, *) {
+            transition(.symbolEffect(.drawOn))
+        } else {
+            transition(.symbolEffect(.appear))
+        }
+    }
+}

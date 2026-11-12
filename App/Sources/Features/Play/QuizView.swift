@@ -325,7 +325,7 @@ private struct AnswerButton: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let icon {
                     Image(systemName: icon).font(.title3.bold())
-                        .transition(.symbolEffect(.drawOn))
+                        .drawOnTransition()
                 }
             }
             .padding(.leading, 10)
