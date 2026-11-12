@@ -43,7 +43,7 @@ struct HomeView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout())
         return layout {
-            Text("Trivia\(Text(".").foregroundStyle(Theme.accent))")
+            Text("Quizio\(Text(".").foregroundStyle(Theme.accent))")
                 .font(Theme.display(.largeTitle))
                 .foregroundStyle(Theme.ink)
                 .accessibilityAddTraits(.isHeader)

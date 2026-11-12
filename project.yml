@@ -31,7 +31,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Trivia
+        INFOPLIST_KEY_CFBundleDisplayName: Quizio
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # Must stay resizable for iPhone Duo: do NOT set UIRequiresFullScreen.
         INFOPLIST_KEY_UIApplicationSupportsMultipleScenes: YES

@@ -1,4 +1,4 @@
-# Trivia
+# Quizio - Trivia with Friends
 
 An ad-free trivia game for iPhone and iPad, built in SwiftUI, with
 multiplayer planned via Game Center.
