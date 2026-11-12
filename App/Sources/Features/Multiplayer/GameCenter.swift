@@ -365,6 +365,13 @@ final class GameCenter: NSObject {
                                 opponentID: String, name: String, playedAt: Date) {
         guard rivalries.add(outcome, matchID: matchID, opponentID: opponentID,
                             opponentName: name, playedAt: playedAt) else { return }
+        // Feeds Profile's rivalry stamps (first win, 10 wins vs a friend).
+        let result: MatchOutcome = switch outcome {
+        case .won: .win
+        case .lost: .loss
+        case .tied: .tie
+        }
+        store.recordMatch(result, against: opponentID, name: name)
         if let data = try? JSONEncoder().encode(rivalries) {
             defaults.set(data, forKey: Self.rivalriesKey)
         }

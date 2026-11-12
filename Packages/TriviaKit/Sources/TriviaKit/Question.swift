@@ -11,9 +11,11 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
     /// Attribution for the question's origin (e.g. "Open Trivia Database,
     /// CC BY-SA 4.0"). Shown in credits; required for OpenTDB questions.
     public let source: String?
+    /// Player who wrote it, for accepted player submissions ("Submitted by …").
+    public let author: String?
 
     public init(id: UUID = UUID(), category: String, prompt: String, choices: [String],
-                correctIndex: Int, difficulty: String? = nil, source: String? = nil) {
+                correctIndex: Int, difficulty: String? = nil, source: String? = nil, author: String? = nil) {
         precondition(choices.indices.contains(correctIndex), "correctIndex out of range")
         self.id = id
         self.category = category
@@ -22,10 +24,11 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
         self.correctIndex = correctIndex
         self.difficulty = difficulty
         self.source = source
+        self.author = author
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, category, prompt, choices, correctIndex, difficulty, source
+        case id, category, prompt, choices, correctIndex, difficulty, source, author
     }
 
     /// Bundled JSON may omit `id`; one is generated at load time.
@@ -43,7 +46,8 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
                   choices: choices,
                   correctIndex: correctIndex,
                   difficulty: try c.decodeIfPresent(String.self, forKey: .difficulty),
-                  source: try c.decodeIfPresent(String.self, forKey: .source))
+                  source: try c.decodeIfPresent(String.self, forKey: .source),
+                  author: try c.decodeIfPresent(String.self, forKey: .author))
     }
 
     public func isCorrect(_ index: Int) -> Bool { index == correctIndex }
@@ -58,7 +62,8 @@ public struct Question: Identifiable, Hashable, Codable, Sendable {
                         choices: order.map { choices[$0] },
                         correctIndex: order.firstIndex(of: correctIndex)!,
                         difficulty: difficulty,
-                        source: source)
+                        source: source,
+                        author: author)
     }
 }
 

@@ -35,8 +35,12 @@ public struct GameSession: Sendable {
     /// False in relaxed mode: no clock, no speed bonus.
     public let isTimed: Bool
     public let powerUpLimit: Int
+    public let mode: GameMode
 
+    /// Seconds left on this question (Classic and Survival).
     public private(set) var timeRemaining: Double
+    /// Seconds left in the whole round (Speed round only).
+    public private(set) var roundTimeRemaining: Double?
     public private(set) var streak = 0
     public private(set) var bestStreak = 0
     public private(set) var results: [QuestionResult] = []
@@ -51,12 +55,16 @@ public struct GameSession: Sendable {
     public init(questions: [Question],
                 reserve: [Question] = [],
                 isTimed: Bool = true,
-                powerUpLimit: Int = GameRules.soloPowerUpsPerRound) {
+                powerUpLimit: Int = GameRules.soloPowerUpsPerRound,
+                mode: GameMode = .classic) {
         self.questions = questions
         self.reserve = reserve
-        self.isTimed = isTimed
+        // A Speed round is its clock, so it can't be relaxed.
+        self.isTimed = isTimed || mode == .speed
         self.powerUpLimit = powerUpLimit
+        self.mode = mode
         self.timeRemaining = GameRules.questionTime
+        self.roundTimeRemaining = mode == .speed ? GameMode.speedRoundSeconds : nil
         self.phase = questions.isEmpty ? .finished : .asking
     }
 
@@ -70,13 +78,28 @@ public struct GameSession: Sendable {
     public var correctCount: Int { results.filter(\.correct).count }
     public var sparksEarned: Int { Scoring.sparks(forPoints: totalPoints) }
     public var breakdown: ScoreBreakdown { results.reduce(.zero) { $0 + $1.breakdown } }
-    public var isLastQuestion: Bool { index == questions.count - 1 }
+    /// Wrong answers and timeouts so far (Survival ends at three).
+    public var strikes: Int { results.filter { !$0.correct }.count }
+    public var strikesLeft: Int? {
+        mode == .survival ? max(GameMode.survivalStrikes - strikes, 0) : nil
+    }
+    public var isLastQuestion: Bool {
+        index == questions.count - 1 || strikesLeft == 0
+    }
+    /// The per-question clock runs (not in relaxed mode or a Speed round).
+    public var hasQuestionClock: Bool { isTimed && mode != .speed }
 
     // MARK: Playing
 
     /// Advances the clock. Times out the question when it reaches zero.
     public mutating func tick(by seconds: Double) {
         guard isTimed, phase == .asking else { return }
+        if let round = roundTimeRemaining {
+            roundTimeRemaining = max(round - seconds, 0)
+            // The question on screen when time runs out doesn't count.
+            if roundTimeRemaining == 0 { phase = .finished }
+            return
+        }
         timeRemaining = max(timeRemaining - seconds, 0)
         if timeRemaining == 0 { resolve(choice: nil) }
     }
@@ -92,7 +115,7 @@ public struct GameSession: Sendable {
     public mutating func advance() {
         guard case .answered = phase else { return }
         streakBeforeMiss = nil
-        if index + 1 < questions.count {
+        if index + 1 < questions.count, strikesLeft != 0 {
             index += 1
             startQuestion()
         } else {
@@ -137,7 +160,11 @@ public struct GameSession: Sendable {
         case .fiftyFifty:
             eliminated.formUnion(wrongChoicesLeft.shuffled(using: &rng).prefix(2))
         case .extraTime:
-            timeRemaining += GameRules.extraTimeSeconds
+            if let round = roundTimeRemaining {
+                roundTimeRemaining = round + GameRules.extraTimeSeconds
+            } else {
+                timeRemaining += GameRules.extraTimeSeconds
+            }
         case .doubleDown:
             break
         case .skip:
@@ -174,12 +201,13 @@ public struct GameSession: Sendable {
     private mutating func resolve(choice: Int?) {
         let q = questions[index]
         let correct = choice.map(q.isCorrect) ?? false
-        let clock: Double? = isTimed ? timeRemaining : nil
+        let clock: Double? = hasQuestionClock ? timeRemaining : nil
         let breakdown: ScoreBreakdown
         if correct {
             streak += 1
             bestStreak = max(bestStreak, streak)
-            breakdown = Scoring.breakdown(timeRemaining: clock, streak: streak, powerUp: powerUpThisQuestion)
+            breakdown = Scoring.breakdown(timeRemaining: clock, streak: streak, powerUp: powerUpThisQuestion,
+                                          difficulty: q.difficulty)
         } else {
             streakBeforeMiss = streak
             streak = 0
@@ -189,6 +217,17 @@ public struct GameSession: Sendable {
                                     timeRemaining: clock, powerUp: powerUpThisQuestion,
                                     breakdown: breakdown, streak: streak)
         results.append(result)
-        phase = .answered(result)
+        guard mode == .speed else {
+            phase = .answered(result)
+            return
+        }
+        // Speed round: straight on to the next question, no feedback stop.
+        streakBeforeMiss = nil
+        if index + 1 < questions.count {
+            index += 1
+            startQuestion()
+        } else {
+            phase = .finished
+        }
     }
 }

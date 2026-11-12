@@ -15,13 +15,15 @@ struct QuizView: View {
     let onPowerUp: (PowerUp) -> Void
     let onNext: () -> Void
     let onQuit: () -> Void
-    /// What quitting costs; challenges submit the score so far instead.
+    var onReport: (Question, QuestionReport.Reason) -> Void = { _, _ in }
     var quitMessage = "You won't earn Sparks for this round. Power-ups you used are spent."
 
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @State private var confirmingQuit = false
+    @State private var reporting: Question?
+    @State private var reported: Set<UUID> = []
 
     private var columns: [GridItem] {
         let count = hSize == .regular && !typeSize.isAccessibilitySize ? 2 : 1
@@ -39,7 +41,10 @@ struct QuizView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         topBar
                         rowLayout {
-                            CategoryChip(name: question.category)
+                            HStack(spacing: 8) {
+                                CategoryChip(name: question.category)
+                                reportButton(question)
+                            }
                             if !typeSize.isAccessibilitySize { Spacer() }
                             ClockView(session: session)
                         }
@@ -50,6 +55,11 @@ struct QuizView: View {
                             .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
                             .accessibilityAddTraits(.isHeader)
                             .id(question.id)
+                        if let author = question.author {
+                            Label("Submitted by \(author)", systemImage: "pencil.and.scribble")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.muted)
+                        }
                         LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(question.choices.indices, id: \.self) { i in
                                 AnswerButton(letter: Self.letters[i],
@@ -107,10 +117,63 @@ struct QuizView: View {
             } message: {
                 Text(quitMessage)
             }
+            .confirmationDialog("Report this question?", isPresented: reportingBinding, titleVisibility: .visible,
+                                presenting: reporting) { q in
+                ForEach(QuestionReport.Reason.allCases, id: \.self) { reason in
+                    Button(reason.label) {
+                        onReport(q, reason)
+                        reported.insert(q.id)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Reports go to the people who review questions. Thanks for keeping the bank honest.")
+            }
         }
     }
 
     private static let bottomBarID = "bottomBar"
+
+    private var reportingBinding: Binding<Bool> {
+        Binding(get: { reporting != nil }, set: { if !$0 { reporting = nil } })
+    }
+
+    private func reportButton(_ question: Question) -> some View {
+        let done = reported.contains(question.id)
+        return Button { reporting = question } label: {
+            Image(systemName: done ? "flag.fill" : "flag")
+                .font(.footnote.weight(.bold))
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(done)
+        .accessibilityLabel(done ? "Question reported" : "Report question")
+    }
+
+    /// "Question 3 of 10", or the mode's own progress.
+    private var progressText: String {
+        switch session.mode {
+        case .classic: "Question \(session.index + 1) of \(session.questions.count)"
+        case .survival: "Question \(session.index + 1)"
+        case .speed: "\(session.correctCount) right"
+        }
+    }
+
+    @ViewBuilder private var modeProgress: some View {
+        switch session.mode {
+        case .classic:
+            ProgressBar(value: Double(session.index + (lastResult == nil ? 0 : 1)),
+                        total: Double(session.questions.count))
+        case .survival:
+            StrikesView(left: session.strikesLeft ?? 0)
+        case .speed:
+            ProgressBar(value: session.roundTimeRemaining ?? 0,
+                        total: max(GameMode.speedRoundSeconds, session.roundTimeRemaining ?? 0))
+        }
+    }
 
     private var inlineBottomBar: Bool { typeSize.isAccessibilitySize }
 
@@ -155,7 +218,7 @@ struct QuizView: View {
 
             VStack(spacing: 6) {
                 rowLayout {
-                    Text("Question \(session.index + 1) of \(session.questions.count)")
+                    Text(progressText)
                     if !typeSize.isAccessibilitySize { Spacer() }
                     Label("Streak \(session.streak)", systemImage: "flame.fill")
                         .labelStyle(.titleAndIcon)
@@ -163,8 +226,7 @@ struct QuizView: View {
                 }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Theme.muted)
-                ProgressBar(value: Double(session.index + (lastResult == nil ? 0 : 1)),
-                            total: Double(session.questions.count))
+                modeProgress
             }
             .accessibilityElement(children: .combine)
         }
@@ -199,6 +261,24 @@ private struct CategoryChip: View {
     }
 }
 
+/// Survival lives: filled hearts for misses left.
+private struct StrikesView: View {
+    let left: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<GameMode.survivalStrikes, id: \.self) { i in
+                Image(systemName: i < left ? "heart.fill" : "heart")
+                    .foregroundStyle(i < left ? Theme.wrong : Theme.line)
+            }
+            Spacer()
+        }
+        .font(.footnote.weight(.bold))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(left) of \(GameMode.survivalStrikes) lives left")
+    }
+}
+
 private struct ProgressBar: View {
     let value: Double
     let total: Double
@@ -221,8 +301,12 @@ private struct ProgressBar: View {
 private struct ClockView: View {
     let session: GameSession
 
-    private var seconds: Int { Int(session.timeRemaining.rounded(.up)) }
-    private var urgent: Bool { session.isTimed && session.phase == .asking && session.timeRemaining <= 5 }
+    private var left: Double { session.roundTimeRemaining ?? session.timeRemaining }
+    private var full: Double { session.roundTimeRemaining == nil ? GameRules.questionTime : GameMode.speedRoundSeconds }
+    private var seconds: Int { Int(left.rounded(.up)) }
+    private var urgent: Bool {
+        session.isTimed && session.phase == .asking && left <= (session.mode == .speed ? 10 : 5)
+    }
 
     var body: some View {
         if session.isTimed {
@@ -230,7 +314,7 @@ private struct ClockView: View {
                 ZStack {
                     Circle().stroke(Theme.line, lineWidth: 4)
                     Circle()
-                        .trim(from: 0, to: min(session.timeRemaining / GameRules.questionTime, 1))
+                        .trim(from: 0, to: min(left / full, 1))
                         .stroke(urgent ? Theme.wrong : Theme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }

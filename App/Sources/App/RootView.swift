@@ -15,6 +15,9 @@ struct RootView: View {
             Tab("Play", systemImage: "questionmark.circle") {
                 NavigationStack { HomeView() }
             }
+            Tab("Profile", systemImage: "person.crop.circle") {
+                NavigationStack { ProfileView() }
+            }
             Tab("Friends", systemImage: "person.2") {
                 NavigationStack { FriendsView() }
             }
