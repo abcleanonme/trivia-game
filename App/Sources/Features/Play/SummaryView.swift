@@ -9,15 +9,17 @@ struct SummaryView: View {
     let onPlayAgain: () -> Void
     let onHome: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                VStack(spacing: 6) {
+            VStack(spacing: 16) {
+                VStack(spacing: 4) {
                     SectionLabel("Round complete")
                     Text(session.totalPoints, format: .number)
                         .font(Theme.display(.largeTitle).weight(.heavy))
-                        .scaleEffect(1.5)
-                        .padding(.vertical, 10)
+                        .scaleEffect(1.4)
+                        .padding(.vertical, 8)
                         .foregroundStyle(Theme.ink)
                     Text("points · \(session.correctCount) of \(session.results.count) correct")
                         .font(.callout)
@@ -28,7 +30,7 @@ struct SummaryView: View {
 
                 answerStrip
 
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     let b = session.breakdown
                     row("Correct answers (\(session.correctCount) × \(GameRules.basePoints))", b.base)
                     row("Speed bonus", b.speed, signed: true)
@@ -39,15 +41,15 @@ struct SummaryView: View {
                     Rectangle().fill(Theme.line).frame(height: 2)
                     row("Total", b.total).font(.headline)
                 }
-                .font(.body)
+                .font(.subheadline)
                 .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
                 .card()
 
                 HStack(spacing: 14) {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 34, weight: .bold))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
                         .shadow(color: Theme.shadow, radius: 0, x: 1, y: 1)
                         .accessibilityHidden(true)
@@ -59,28 +61,37 @@ struct SummaryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .foregroundStyle(Theme.onSpark)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
                 .card(fill: Theme.spark, drop: 5)
                 .accessibilityElement(children: .combine)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 40)
-            .padding(.bottom, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                Button(action: onPlayAgain) {
-                    Text("Play again").font(.title3.bold()).frame(maxWidth: .infinity, minHeight: 56)
-                }
-                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+            // One row: a small Home and a big Play again. Stacks when large
+            // text would squeeze them.
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 10))
+                : AnyLayout(HStackLayout(spacing: 10))) {
                 Button(action: onHome) {
-                    Text("Home").font(.headline).frame(maxWidth: .infinity, minHeight: 52)
+                    Label("Home", systemImage: "house.fill")
+                        .font(.headline)
+                        .padding(.horizontal, 18)
+                        .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil, minHeight: 52)
                 }
                 .buttonStyle(.chunky(fill: Theme.card, capsule: true))
+                Button(action: onPlayAgain) {
+                    Label("Play again", systemImage: "arrow.clockwise")
+                        .font(.title3.bold())
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -91,13 +102,17 @@ struct SummaryView: View {
         .background(Theme.paper)
     }
 
+    /// One dot per question, with a check or cross so it never relies on
+    /// color alone.
     private var answerStrip: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             ForEach(Array(session.results.enumerated()), id: \.offset) { _, r in
-                Capsule()
-                    .fill(r.correct ? Theme.correct : Theme.wrong)
+                Image(systemName: r.correct ? "checkmark" : "xmark")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(.white)
                     .frame(maxWidth: 26)
-                    .frame(height: 10)
+                    .frame(height: 22)
+                    .background(Capsule().fill(r.correct ? Theme.correct : Theme.wrong))
             }
         }
         .accessibilityElement(children: .ignore)

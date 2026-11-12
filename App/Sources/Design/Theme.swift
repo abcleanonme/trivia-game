@@ -58,6 +58,9 @@ struct ChunkyButtonStyle: ButtonStyle {
     var foreground: Color = Theme.ink
     var shape: AnyShape = AnyShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
     var depth: CGFloat = 4
+    /// Keep the ink outline when disabled (e.g. a revealed answer), instead
+    /// of fading to the light disabled line.
+    var outlined = false
 
     @Environment(\.isEnabled) private var isEnabled
 
@@ -67,10 +70,12 @@ struct ChunkyButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(foreground)
             .background(shape.fill(fill))
-            .overlay(shape.stroke(isEnabled ? Theme.ink : Theme.line, lineWidth: Theme.border))
+            .overlay(shape.stroke(isEnabled || outlined ? Theme.ink : Theme.line, lineWidth: Theme.border))
             .offset(y: pressed ? drop : 0)
             .background(shape.fill(Theme.shadow).offset(y: drop))
-            .padding(.bottom, drop)
+            // Reserve the full depth even when the drop is hidden, so a
+            // button that becomes disabled doesn't shift everything below it.
+            .padding(.bottom, depth)
             .animation(.easeOut(duration: 0.08), value: pressed)
     }
 }
