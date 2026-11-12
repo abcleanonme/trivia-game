@@ -34,7 +34,7 @@ struct QuizView: View {
         if let question = session.currentQuestion {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 12) {
                         topBar
                         rowLayout {
                             CategoryChip(name: question.category)
@@ -42,13 +42,16 @@ struct QuizView: View {
                             ClockView(session: session)
                         }
                         Text(question.prompt)
-                            .font(Theme.display(.title))
+                            .font(Theme.display(.title2))
                             .foregroundStyle(Theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                            // Room for two lines, so answers don't jump
+                            // between short and long questions.
+                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                            .padding(.vertical, 4)
                             .accessibilityAddTraits(.isHeader)
                             .id(question.id)
-                        LazyVGrid(columns: columns, spacing: 12) {
+                        LazyVGrid(columns: columns, spacing: 10) {
                             ForEach(question.choices.indices, id: \.self) { i in
                                 AnswerButton(letter: Self.letters[i],
                                              title: question.choices[i],
@@ -89,7 +92,8 @@ struct QuizView: View {
                 if !inlineBottomBar {
                     bottomBar
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 10)
                         .frame(maxWidth: 760)
                         .frame(maxWidth: .infinity)
                         .background(Theme.paper)
@@ -257,11 +261,11 @@ private struct AnswerButton: View {
     let action: () -> Void
 
     /// Grows with Dynamic Type so the letter always fits its badge.
-    @ScaledMetric(relativeTo: .headline) private var badgeSize: CGFloat = 38
+    @ScaledMetric(relativeTo: .headline) private var badgeSize: CGFloat = 34
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Text(letter)
                     .font(.headline)
                     // The letter is a label, not content: cap it so long
@@ -279,12 +283,14 @@ private struct AnswerButton: View {
                     Image(systemName: icon).font(.title3.bold())
                 }
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 16)
-            .padding(.vertical, 10)
-            .frame(minHeight: 60)
+            .padding(.leading, 9)
+            .padding(.trailing, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
         }
-        .buttonStyle(ChunkyButtonStyle(fill: fill, foreground: foreground, depth: style == .idle ? 4 : 0))
+        .buttonStyle(ChunkyButtonStyle(fill: fill, foreground: foreground,
+                                       depth: 4,
+                                       outlined: style == .correct || style == .wrong))
         .disabled(style != .idle)
         .accessibilityLabel(accessibilityText)
     }
@@ -348,33 +354,40 @@ private struct PowerUpTray: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 2 : 4)
+        Array(repeating: GridItem(.flexible(), spacing: 8), count: typeSize.isAccessibilitySize ? 2 : 4)
     }
 
     private var limitLeft: Int { session.powerUpLimit - session.powerUpsUsed }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             (typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
                 : AnyLayout(HStackLayout())) {
                 SectionLabel("Power-ups")
                 if !typeSize.isAccessibilitySize { Spacer() }
-                Text("1 per question · \(limitLeft) left this round")
+                Text("1 per question · \(limitLeft) left")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.muted)
             }
-            LazyVGrid(columns: columns, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(PowerUp.trayOrder) { p in
                     let count = stock(p)
                     let active = session.powerUpThisQuestion == p
                     Button { onUse(p) } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: p.systemImage).font(.headline)
-                            Text(p.shortTitle).font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.7)
-                            Text(active ? "Active" : "\(count) left").font(.caption2.weight(.semibold))
+                        VStack(spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: p.systemImage).font(.footnote.bold())
+                                Text(p.shortTitle).font(.subheadline.bold())
+                            }
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            Text(active ? "Active" : "\(count) left")
+                                .font(.caption2.weight(.semibold))
+                                .opacity(count == 0 && !active ? 0.7 : 1)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .padding(.horizontal, 4)
+                        .frame(maxWidth: .infinity, minHeight: 50)
                     }
                     .buttonStyle(ChunkyButtonStyle(fill: active ? Theme.spark : Theme.card,
                                                    foreground: active ? Theme.onSpark : Theme.ink))
