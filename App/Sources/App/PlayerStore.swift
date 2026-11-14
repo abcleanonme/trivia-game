@@ -37,13 +37,14 @@ final class PlayerStore {
     let bank: QuestionBank
 
     @ObservationIgnored private let defaults: UserDefaults
-    /// Lowercased prompts of recently dealt questions, newest last, so rounds
-    /// don't repeat until the player has seen a good chunk of the bank.
-    @ObservationIgnored private var recentPrompts: [String]
+    /// Every question the player has been shown, oldest first, so rounds
+    /// deal unseen questions until a pool is used up, then the oldest.
+    @ObservationIgnored private var seen: SeenQuestions
     private static let walletKey = "wallet.v1"
     private static let progressKey = "progress.v1"
-    private static let recentKey = "recentPrompts.v1"
-    private static let recentLimit = 400
+    private static let seenKey = "seenQuestions.v1"
+    /// Older builds kept only the last 400 prompts here; read once to migrate.
+    private static let legacyRecentKey = "recentPrompts.v1"
 
     init(defaults: UserDefaults = .standard, bank: QuestionBank = PlayerStore.loadBundledBank()) {
         self.defaults = defaults
@@ -54,7 +55,12 @@ final class PlayerStore {
         } else {
             wallet = .starter
         }
-        recentPrompts = defaults.stringArray(forKey: Self.recentKey) ?? []
+        if let data = defaults.data(forKey: Self.seenKey),
+           let saved = try? JSONDecoder().decode(SeenQuestions.self, from: data) {
+            seen = saved
+        } else {
+            seen = SeenQuestions(prompts: defaults.stringArray(forKey: Self.legacyRecentKey) ?? [])
+        }
         if let data = defaults.data(forKey: Self.progressKey),
            let saved = try? JSONDecoder().decode(PlayerProgress.self, from: data) {
             progress = saved
@@ -82,7 +88,9 @@ final class PlayerStore {
         switch request.kind {
         case .solo(let mode, let category, let difficulty):
             let round = bank.dealRound(count: mode.questionCount, category: category,
-                                       difficulty: difficulty.tag, avoiding: Set(recentPrompts))
+                                       difficulty: difficulty.tag, seen: seen)
+            // The first few are seen even if the app closes mid-round; the
+            // rest are recorded as they're shown (see `finish`).
             remember(round.questions.prefix(GameRules.questionsPerRound))
             return GameSession(questions: round.questions, reserve: round.reserve,
                                isTimed: !(relaxed && mode.supportsRelaxed), mode: mode)
@@ -92,7 +100,7 @@ final class PlayerStore {
             let round = DailyChallenge.round(for: day, from: bank)
             return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
         case .event(let event, _):
-            let round = event.pool(from: bank).dealRound(avoiding: Set(recentPrompts))
+            let round = event.pool(from: bank).dealRound(seen: seen)
             remember(round.questions[...])
             return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
         }
@@ -106,6 +114,7 @@ final class PlayerStore {
         case .daily(let day): .daily(day)
         case .event(let event, let week): .event(event, week: week)
         }
+        remember(session.shownQuestions[...])
         let rewards = progress.record(session, kind: kind, finished: finished)
         wallet.earn(sparks: rewards.sparks)
         save()
@@ -114,9 +123,11 @@ final class PlayerStore {
     }
 
     private func remember(_ questions: ArraySlice<Question>) {
-        recentPrompts.append(contentsOf: questions.map { $0.prompt.lowercased() })
-        recentPrompts = Array(recentPrompts.suffix(Self.recentLimit))
-        defaults.set(recentPrompts, forKey: Self.recentKey)
+        seen.markSeen(questions)
+        if let data = try? JSONEncoder().encode(seen) {
+            defaults.set(data, forKey: Self.seenKey)
+        }
+        defaults.removeObject(forKey: Self.legacyRecentKey)
     }
 
     // MARK: Style and Player Card
@@ -141,22 +152,10 @@ final class PlayerStore {
         saveProgress()
     }
 
-    // MARK: Questions from players
-
-    func submit(_ submission: QuestionSubmission) {
-        progress.submit(submission)
-        saveProgress()
-    }
+    // MARK: Question reports
 
     func report(_ question: Question, reason: QuestionReport.Reason) {
         progress.reports.append(QuestionReport(question: question, reason: reason))
-        saveProgress()
-    }
-
-    /// Applies a moderation decision once a review service reports one.
-    func applyReview(_ id: UUID, status: QuestionSubmission.Status) {
-        wallet.earn(sparks: progress.updateSubmission(id, to: status))
-        save()
         saveProgress()
     }
 
@@ -197,9 +196,10 @@ final class PlayerStore {
         }
     }
 
-    /// Bundled question files: our own reviewed questions, then the Open
-    /// Trivia DB seed (CC BY-SA 4.0, kept in its own file; see Credits).
-    nonisolated static let bundledBankFiles = ["originals", "opentdb"]
+    /// Bundled question files: our own questions (hand-written, then
+    /// AI-drafted), then the Open Trivia DB seed (CC BY-SA 4.0, kept in its
+    /// own file; see Credits).
+    nonisolated static let bundledBankFiles = ["originals", "originals-ai", "opentdb"]
 
     nonisolated static func loadBundledBank() -> QuestionBank {
         let banks = bundledBankFiles.compactMap { name -> QuestionBank? in

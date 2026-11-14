@@ -321,3 +321,78 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         #expect(throws: DecodingError.self) { try QuestionBank(jsonData: Data(json.utf8)) }
     }
 }
+
+@Suite struct SeenQuestionsTests {
+    static func pool(_ n: Int, category: String = "Science") -> [Question] {
+        (0..<n).map { Question(category: category, prompt: "Q\($0)", choices: ["a", "b", "c", "d"], correctIndex: 0) }
+    }
+
+    @Test func noRepeatsUntilPoolIsUsedUp() {
+        let bank = QuestionBank(questions: Self.pool(40))
+        var seen = SeenQuestions()
+        var rng = SeededRNG(state: 7)
+        var dealt: [String] = []
+        for _ in 0..<4 {
+            let round = bank.dealRound(count: 10, reserve: 0, category: "Science", seen: seen, using: &rng)
+            dealt += round.questions.map(\.prompt)
+            seen.markSeen(round.questions)
+        }
+        #expect(dealt.count == 40)
+        #expect(Set(dealt).count == 40)
+    }
+
+    @Test func repeatsComeBackOldestFirst() {
+        let bank = QuestionBank(questions: Self.pool(12))
+        var seen = SeenQuestions()
+        for i in 0..<12 { seen.markSeen(prompt: "Q\(i)") }   // Q0 is oldest
+        var rng = SeededRNG(state: 1)
+        let round = bank.dealRound(count: 4, reserve: 0, seen: seen, using: &rng)
+        #expect(Set(round.questions.map(\.prompt)) == ["Q0", "Q1", "Q2", "Q3"])
+    }
+
+    @Test func unseenBeatsCategoryCap() {
+        // Mixed rounds cap questions per category, but never by pulling in a
+        // repeat ahead of an unseen question.
+        let bank = QuestionBank(questions: Self.pool(10, category: "A") + Self.pool(1, category: "B").map {
+            Question(category: "B", prompt: "B0", choices: $0.choices, correctIndex: 0)
+        })
+        var seen = SeenQuestions()
+        seen.markSeen(prompt: "B0")
+        var rng = SeededRNG(state: 3)
+        let round = bank.dealRound(count: 10, reserve: 0, seen: seen, using: &rng)
+        #expect(!round.questions.contains { $0.prompt == "B0" })
+    }
+
+    @Test func markingAgainMovesToNewest() {
+        var seen = SeenQuestions()
+        seen.markSeen(prompt: "A"); seen.markSeen(prompt: "B"); seen.markSeen(prompt: "a")
+        #expect(seen.prompts == ["b", "a"])
+    }
+
+    @Test func limitDropsOldest() {
+        var seen = SeenQuestions(limit: 3)
+        for p in ["a", "b", "c", "d"] { seen.markSeen(prompt: p) }
+        #expect(seen.prompts == ["b", "c", "d"])
+        let q = Question(category: "X", prompt: "B", choices: ["1", "2"], correctIndex: 0)
+        #expect(seen.age(of: q) == 0)
+    }
+
+    @Test func roundTripsThroughJSON() throws {
+        var seen = SeenQuestions()
+        seen.markSeen(prompt: "Hello")
+        let back = try JSONDecoder().decode(SeenQuestions.self, from: JSONEncoder().encode(seen))
+        #expect(back == seen)
+        #expect(back.age(of: Question(category: "X", prompt: "hello", choices: ["1", "2"], correctIndex: 0)) == 0)
+    }
+
+    @Test func shownQuestionsIncludeSkipped() {
+        let qs = Self.pool(3)
+        var s = GameSession(questions: qs, reserve: Self.pool(1, category: "R").map {
+            Question(category: "R", prompt: "R0", choices: $0.choices, correctIndex: 0)
+        })
+        #expect(s.shownQuestions.map(\.prompt) == ["Q0"])
+        let used = s.use(.skip)
+        #expect(used)
+        #expect(Set(s.shownQuestions.map(\.prompt)) == ["R0", "Q0"])
+    }
+}

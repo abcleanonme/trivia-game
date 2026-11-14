@@ -15,7 +15,6 @@ public enum Stamp: Hashable, Codable, Sendable, Identifiable {
     /// 10 wins against the same friend.
     case bigRivalry
     case fiftyWins
-    case questionWriter
     case eventComplete(String)
     /// Category mastery level 5 or 10.
     case mastery(category: String, level: Int)
@@ -32,7 +31,6 @@ public enum Stamp: Hashable, Codable, Sendable, Identifiable {
         case .firstRivalWin: "rival1"
         case .bigRivalry: "rival10"
         case .fiftyWins: "wins50"
-        case .questionWriter: "writer"
         case .eventComplete(let e): "event.\(e)"
         case .mastery(let c, let l): "mastery.\(c).\(l)"
         }
@@ -48,7 +46,6 @@ public enum Stamp: Hashable, Codable, Sendable, Identifiable {
         case .firstRivalWin: "First friend win"
         case .bigRivalry: "\(RivalryBook.bigRivalWins) wins vs one friend"
         case .fiftyWins: "50 match wins"
-        case .questionWriter: "Question accepted"
         case .eventComplete(let e): "\(WeeklyEvent.all.first { $0.id == e }?.title ?? "Event") complete"
         case .mastery(let c, let l): "\(c) level \(l)"
         }
@@ -64,7 +61,6 @@ public enum Stamp: Hashable, Codable, Sendable, Identifiable {
         case .firstRivalWin: "person.2.fill"
         case .bigRivalry: "figure.fencing"
         case .fiftyWins: "trophy.fill"
-        case .questionWriter: "pencil.and.scribble"
         case .eventComplete: "flag.checkered"
         case .mastery(_, let l): l >= 10 ? "rosette" : "medal.fill"
         }
@@ -81,7 +77,6 @@ public enum Stamp: Hashable, Codable, Sendable, Identifiable {
         case .hundredDailies: "Regular"
         case .bigRivalry: "Arch Rival"
         case .fiftyWins: "Champion"
-        case .questionWriter: "Question Writer"
         case .mastery(let c, 5): "\(c) Buff"
         case .mastery(let c, 10): "\(c) Master"
         default: nil

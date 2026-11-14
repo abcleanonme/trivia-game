@@ -17,7 +17,7 @@ import Testing
         try QuestionBank(jsonData: Data(contentsOf: resources.appending(path: "\(name).json")))
     }
 
-    @Test(arguments: ["originals", "opentdb"])
+    @Test(arguments: ["originals", "originals-ai", "opentdb"])
     func everyQuestionIsPlayable(file: String) throws {
         let bank = try Self.load(file)
         #expect(!bank.questions.isEmpty)
@@ -34,8 +34,25 @@ import Testing
         #expect(bank.questions.allSatisfy { $0.source?.contains("CC BY-SA 4.0") == true })
     }
 
+    @Test func aiDraftsHaveDifficultyAndAreLabeled() throws {
+        let bank = try Self.load("originals-ai")
+        for q in bank.questions {
+            #expect(["easy", "medium", "hard"].contains(q.difficulty ?? ""), "\(q.prompt)")
+            #expect(q.source?.contains("AI-drafted") == true, "\(q.prompt)")
+        }
+    }
+
+    /// Thin categories repeat fast; keep every category deep enough for
+    /// several rounds per difficulty.
+    @Test func everyCategoryHasADeepPool() throws {
+        let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
+        for category in bank.categories {
+            #expect(bank.count(in: category) >= 150, "\(category) has \(bank.count(in: category))")
+        }
+    }
+
     @Test func mergedBankDealsFullRoundsInEveryCategory() throws {
-        let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("opentdb")])
+        let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
         #expect(bank.dealRound().questions.count == GameRules.questionsPerRound)
         for category in bank.categories {
             let round = bank.dealRound(category: category)

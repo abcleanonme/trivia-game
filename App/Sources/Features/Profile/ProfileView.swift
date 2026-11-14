@@ -88,24 +88,6 @@ struct ProfileView: View {
                         }
                     }
                 }
-
-                section("Your questions") {
-                    NavigationLink { SubmitQuestionView() } label: {
-                        Label("Write a question", systemImage: "square.and.pencil")
-                            .font(.headline).padding(.horizontal, 18).frame(minHeight: 44)
-                    }
-                    .buttonStyle(.chunky(fill: Theme.card, capsule: true))
-                    ForEach(p.submissions) { s in
-                        HStack(alignment: .top) {
-                            Text(s.prompt).font(.subheadline).foregroundStyle(Theme.ink)
-                            Spacer()
-                            Text(s.status.label)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(s.status == .accepted ? Theme.correct : Theme.muted)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)

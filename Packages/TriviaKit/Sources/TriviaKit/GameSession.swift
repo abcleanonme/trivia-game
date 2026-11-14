@@ -48,6 +48,8 @@ public struct GameSession: Sendable {
     public private(set) var eliminated: Set<Int> = []
     public private(set) var powerUpThisQuestion: PowerUp?
     public private(set) var powerUpsUsed = 0
+    /// Questions swapped out by Skip. The player still saw them.
+    public private(set) var skippedQuestions: [Question] = []
 
     /// Streak before the last miss, so second chance can restore it.
     private var streakBeforeMiss: Int?
@@ -72,6 +74,14 @@ public struct GameSession: Sendable {
 
     public var currentQuestion: Question? {
         phase == .finished ? nil : questions[index]
+    }
+
+    /// Every question the player has been shown so far, including skipped
+    /// ones. Long rounds deal more than most players reach; only these count
+    /// as seen.
+    public var shownQuestions: [Question] {
+        guard !questions.isEmpty else { return skippedQuestions }
+        return Array(questions.prefix(index + 1)) + skippedQuestions
     }
 
     public var totalPoints: Int { results.reduce(0) { $0 + $1.points } }
@@ -168,6 +178,7 @@ public struct GameSession: Sendable {
         case .doubleDown:
             break
         case .skip:
+            skippedQuestions.append(questions[index])
             questions[index] = reserve.removeFirst()
             startQuestion()
             // A fresh question gets a fresh power-up slot; the round limit
