@@ -34,9 +34,16 @@ Add to `originals.json` (or a new file listed in
 Answer order is shuffled every round, so putting the right answer first is fine.
 AI-drafted questions must be fact-checked by a person before they're added.
 
+## Anime
+Anime and manga questions have their own **Anime** category (OpenTDB's
+"Entertainment: Japanese Anime & Manga"). They used to be folded into Pop
+Culture. New anime questions go in Anime, not Pop Culture.
+
 ## AI-drafted questions
 `originals-ai.json` fills out the categories that were thinnest in the
-OpenTDB seed (Art, Nature, Books, Sports, TV, Tech). Every entry has
+OpenTDB seed (Art, Nature, Books, Sports, TV, Tech), plus recent (2022–2025)
+Pop Culture questions. Pop Culture dates fast: refresh it regularly and
+retire questions that stop being "current". Every entry has
 `"reviewed": false` until a person fact-checks it; flip it to `true` (or
 delete the question) as you go. **Finish the review before an App Store
 release.** TestFlight testers can flag bad ones with Report in the meantime.

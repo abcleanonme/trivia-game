@@ -25,7 +25,7 @@ public struct QuestionBank: Sendable {
     /// The order categories appear on Home. Anything else follows, A to Z.
     public static let preferredCategoryOrder = [
         "General", "Science", "History", "Geography", "Movies", "TV", "Music",
-        "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture",
+        "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture", "Anime",
     ]
 
     public var categories: [String] {
