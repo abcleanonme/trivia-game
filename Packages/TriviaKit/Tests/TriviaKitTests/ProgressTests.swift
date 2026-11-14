@@ -306,47 +306,6 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
     }
 }
 
-@Suite struct SubmissionTests {
-    func make(_ prompt: String = "Which planet has the most moons?",
-              choices: [String] = ["Saturn", "Jupiter", "Uranus", "Neptune"],
-              source: String = "", previous: [QuestionSubmission] = [], now: Date = Date()) throws(QuestionSubmission.Problem) -> QuestionSubmission {
-        try QuestionSubmission.make(prompt: prompt, choices: choices, correctIndex: 0, category: "Science",
-                                    source: source, previous: previous, now: now)
-    }
-
-    @Test func validates() throws {
-        #expect(throws: QuestionSubmission.Problem.promptMissing) { try make("  ") }
-        #expect(throws: QuestionSubmission.Problem.answerMissing) { try make(choices: ["a", "b", "c", ""]) }
-        #expect(throws: QuestionSubmission.Problem.duplicateAnswers) { try make(choices: ["a", "B", "b", "c"]) }
-        #expect(throws: QuestionSubmission.Problem.badSourceLink) { try make(source: "javascript:alert(1)") }
-        let ok = try make(source: "https://nasa.gov/moons")
-        #expect(ok.status == .queued)
-        #expect(ok.sourceURL?.host == "nasa.gov")
-    }
-
-    @Test func rateLimited() throws {
-        let now = Date()
-        var previous: [QuestionSubmission] = []
-        for i in 0..<QuestionSubmission.perDay {
-            previous.append(try make("Question \(i)?", previous: previous, now: now.addingTimeInterval(Double(i))))
-        }
-        #expect(throws: QuestionSubmission.Problem.self) { try make(previous: previous, now: now.addingTimeInterval(60)) }
-        // A day later it's fine again.
-        _ = try make(previous: previous, now: now.addingTimeInterval(86_401))
-    }
-
-    @Test func acceptedPaysOnce() throws {
-        var p = PlayerProgress()
-        let s = try make()
-        p.submit(s)
-        let first = p.updateSubmission(s.id, to: .accepted)
-        let second = p.updateSubmission(s.id, to: .accepted)
-        #expect(first == QuestionSubmission.acceptedSparks)
-        #expect(second == 0)
-        #expect(p.titles.contains("Question Writer"))
-    }
-}
-
 @Suite struct BundledEventTests {
     static let bank = QuestionBank(merging: [try! BundledBankTests.load("originals"),
                                              try! BundledBankTests.load("opentdb")])

@@ -55,11 +55,6 @@ struct QuizView: View {
                             .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
                             .accessibilityAddTraits(.isHeader)
                             .id(question.id)
-                        if let author = question.author {
-                            Label("Submitted by \(author)", systemImage: "pencil.and.scribble")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(Theme.muted)
-                        }
                         LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(question.choices.indices, id: \.self) { i in
                                 AnswerButton(letter: Self.letters[i],

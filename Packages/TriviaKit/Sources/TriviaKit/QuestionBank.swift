@@ -25,7 +25,7 @@ public struct QuestionBank: Sendable {
     /// The order categories appear on Home. Anything else follows, A to Z.
     public static let preferredCategoryOrder = [
         "General", "Science", "History", "Geography", "Movies", "TV", "Music",
-        "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture",
+        "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture", "Anime",
     ]
 
     public var categories: [String] {
@@ -48,18 +48,64 @@ public struct QuestionBank: Sendable {
                           difficulty: String? = nil,
                           avoiding recent: Set<String> = [],
                           using rng: inout some RandomNumberGenerator) -> (questions: [Question], reserve: [Question]) {
+        deal(count: count, reserve: reserve, category: category, difficulty: difficulty,
+             age: { recent.contains($0.prompt.lowercased()) ? 0 : nil }, using: &rng)
+    }
+
+    /// Deals a round that never repeats a question while unseen ones remain
+    /// in the pool. When the pool runs out, the questions seen longest ago
+    /// are reused first.
+    public func dealRound(count: Int = GameRules.questionsPerRound,
+                          reserve: Int = GameRules.soloPowerUpsPerRound,
+                          category: String? = nil,
+                          difficulty: String? = nil,
+                          seen: SeenQuestions,
+                          using rng: inout some RandomNumberGenerator) -> (questions: [Question], reserve: [Question]) {
+        deal(count: count, reserve: reserve, category: category, difficulty: difficulty,
+             age: seen.age(of:), using: &rng)
+    }
+
+    public func dealRound(count: Int = GameRules.questionsPerRound,
+                          reserve: Int = GameRules.soloPowerUpsPerRound,
+                          category: String? = nil,
+                          difficulty: String? = nil,
+                          seen: SeenQuestions) -> (questions: [Question], reserve: [Question]) {
+        var rng = SystemRandomNumberGenerator()
+        return dealRound(count: count, reserve: reserve, category: category, difficulty: difficulty,
+                         seen: seen, using: &rng)
+    }
+
+    /// `age` is nil for an unseen question, else smaller for older sightings.
+    private func deal(count: Int, reserve: Int, category: String?, difficulty: String?,
+                      age: (Question) -> Int?,
+                      using rng: inout some RandomNumberGenerator) -> (questions: [Question], reserve: [Question]) {
+        let take = count + reserve
         var eligible = questions.filter { category == nil || $0.category == category }
         if let difficulty {
             let tagged = eligible.filter { $0.difficulty == difficulty }
             // A tiny pool (e.g. a category with few hard ones) falls back to all.
-            if tagged.count >= count + reserve || tagged.count >= GameRules.questionsPerRound { eligible = tagged }
+            if tagged.count >= take || tagged.count >= GameRules.questionsPerRound { eligible = tagged }
         }
-        let isRecent = { (q: Question) in recent.contains(q.prompt.lowercased()) }
-        let fresh = eligible.filter { !isRecent($0) }.shuffled(using: &rng)
-        let stale = eligible.filter(isRecent).shuffled(using: &rng)
-        let ordered = Self.balanced(fresh + stale, take: count + reserve,
-                                    maxPerCategory: category == nil ? Self.maxPerCategoryInMix : nil,
-                                    maxHard: difficulty == nil ? Self.maxHardPerRound : nil)
+        var fresh: [Question] = []
+        var stale: [(age: Int, q: Question)] = []
+        for q in eligible {
+            if let a = age(q) { stale.append((a, q)) } else { fresh.append(q) }
+        }
+        fresh.shuffle(using: &rng)
+        // Oldest first; shuffle first so equal ages come out in random order.
+        stale.shuffle(using: &rng)
+        let reused = stale.sorted { $0.age < $1.age }.map(\.q)
+        // Caps only reorder within the fresh questions, so a cap never pulls
+        // a repeat in ahead of an unseen question.
+        let caps = (maxPerCategory: category == nil ? Self.maxPerCategoryInMix : nil,
+                    maxHard: difficulty == nil ? Self.maxHardPerRound : nil)
+        var ordered = Self.balanced(fresh, take: take, maxPerCategory: caps.maxPerCategory,
+                                    maxHard: caps.maxHard, scaleFor: take)
+        if ordered.count < take {
+            ordered += Self.balanced(reused, take: take - ordered.count,
+                                     maxPerCategory: caps.maxPerCategory, maxHard: caps.maxHard,
+                                     scaleFor: take)
+        }
         let picked = ordered.map { $0.shufflingChoices(using: &rng) }
         let main = Array(picked.prefix(count))
         let spare = Array(picked.dropFirst(main.count))
@@ -75,9 +121,9 @@ public struct QuestionBank: Sendable {
     /// Takes questions in order, skipping ones that would break the category
     /// or difficulty caps; if that leaves too few, fills up with the skipped ones.
     static func balanced(_ candidates: [Question], take: Int, maxPerCategory: Int?,
-                         maxHard: Int? = maxHardPerRound) -> [Question] {
+                         maxHard: Int? = maxHardPerRound, scaleFor roundSize: Int? = nil) -> [Question] {
         // Long rounds (Survival, Speed) scale the caps with their length.
-        let scale = max(1, take / (GameRules.questionsPerRound + GameRules.soloPowerUpsPerRound))
+        let scale = max(1, (roundSize ?? take) / (GameRules.questionsPerRound + GameRules.soloPowerUpsPerRound))
         let maxPerCategory = maxPerCategory.map { $0 * scale }
         let maxHard = maxHard.map { $0 * scale }
         var picked: [Question] = []

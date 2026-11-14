@@ -58,7 +58,6 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
     public var masteryCorrect: [String: Int] = [:]
     public var events: [String: EventProgress] = [:]
     public var rivals = RivalryBook()
-    public var submissions: [QuestionSubmission] = []
     public var reports: [QuestionReport] = []
     public var inventory = Inventory()
     public var card = PlayerCard()
@@ -204,24 +203,6 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         return rewards.newStamps
     }
 
-    // MARK: Submissions
-
-    public mutating func submit(_ submission: QuestionSubmission) {
-        submissions.insert(submission, at: 0)
-    }
-
-    /// Applies a review decision. Accepted questions pay Sparks and the
-    /// Question Writer stamp once. Returns the Sparks to add to the wallet.
-    public mutating func updateSubmission(_ id: UUID, to status: QuestionSubmission.Status) -> Int {
-        guard let i = submissions.firstIndex(where: { $0.id == id }) else { return 0 }
-        submissions[i].status = status
-        guard status == .accepted, !submissions[i].rewarded else { return 0 }
-        submissions[i].rewarded = true
-        var rewards = RoundRewards()
-        earn(.questionWriter, into: &rewards)
-        return QuestionSubmission.acceptedSparks
-    }
-
     // MARK: Private
 
     private mutating func earn(_ stamp: Stamp, into rewards: inout RoundRewards) {
@@ -235,7 +216,7 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
     // Tolerant decoding: fields added in later versions start empty instead
     // of wiping a saved profile.
     private enum CodingKeys: String, CodingKey {
-        case stats, streak, dailies, masteryCorrect, events, rivals, submissions, reports, inventory, card, stamps
+        case stats, streak, dailies, masteryCorrect, events, rivals, reports, inventory, card, stamps
     }
 
     public init(from decoder: any Decoder) throws {
@@ -247,7 +228,6 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         masteryCorrect = try c.decodeIfPresent([String: Int].self, forKey: .masteryCorrect) ?? [:]
         events = try c.decodeIfPresent([String: EventProgress].self, forKey: .events) ?? [:]
         rivals = try c.decodeIfPresent(RivalryBook.self, forKey: .rivals) ?? RivalryBook()
-        submissions = try c.decodeIfPresent([QuestionSubmission].self, forKey: .submissions) ?? []
         reports = try c.decodeIfPresent([QuestionReport].self, forKey: .reports) ?? []
         inventory = try c.decodeIfPresent(Inventory.self, forKey: .inventory) ?? Inventory()
         card = try c.decodeIfPresent(PlayerCard.self, forKey: .card) ?? PlayerCard()
@@ -262,7 +242,6 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         try c.encode(masteryCorrect, forKey: .masteryCorrect)
         try c.encode(events, forKey: .events)
         try c.encode(rivals, forKey: .rivals)
-        try c.encode(submissions, forKey: .submissions)
         try c.encode(reports, forKey: .reports)
         try c.encode(inventory, forKey: .inventory)
         try c.encode(card, forKey: .card)

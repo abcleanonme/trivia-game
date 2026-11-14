@@ -40,7 +40,7 @@ CATEGORY_MAP = {
     "Entertainment: Video Games": "Games",
     "Entertainment: Board Games": "Games",
     "Entertainment: Comics": "Pop Culture",
-    "Entertainment: Japanese Anime & Manga": "Pop Culture",
+    "Entertainment: Japanese Anime & Manga": "Anime",
     "Entertainment: Cartoon & Animations": "Pop Culture",
     "Celebrities": "Pop Culture",
     "Science & Nature": "Science",

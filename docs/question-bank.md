@@ -6,6 +6,7 @@ We own our question bank. It ships inside the app as JSON files in
 | File | What | License |
 |---|---|---|
 | `originals.json` | Our own written and reviewed questions | Ours |
+| `originals-ai.json` | Our own AI-drafted questions (`"reviewed": false` until a person checks them) | Ours |
 | `opentdb.json` | Seed set from the [Open Trivia Database](https://opentdb.com) (multiple-choice only) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 
 ## Open Trivia DB terms
@@ -32,3 +33,27 @@ Add to `originals.json` (or a new file listed in
 
 Answer order is shuffled every round, so putting the right answer first is fine.
 AI-drafted questions must be fact-checked by a person before they're added.
+
+## Anime
+Anime and manga questions have their own **Anime** category (OpenTDB's
+"Entertainment: Japanese Anime & Manga"). They used to be folded into Pop
+Culture. New anime questions go in Anime, not Pop Culture.
+
+## AI-drafted questions
+`originals-ai.json` fills out the categories that were thinnest in the
+OpenTDB seed (Art, Nature, Books, Sports, TV, Tech), plus recent (2022–2025)
+Pop Culture questions. Pop Culture dates fast: refresh it regularly and
+retire questions that stop being "current". Every entry has
+`"reviewed": false` until a person fact-checks it; flip it to `true` (or
+delete the question) as you go. **Finish the review before an App Store
+release.** TestFlight testers can flag bad ones with Report in the meantime.
+
+Drafts are de-duplicated against the existing bank (exact and near-match
+prompts) before they're added.
+
+## Not repeating questions
+`PlayerStore` keeps a `SeenQuestions` list of every question a player has
+been shown (oldest first). Rounds deal only unseen questions until a pool
+(category + difficulty) is used up, then reuse the ones seen longest ago.
+Only questions actually shown count, including ones swapped out by Skip, so
+a long Survival deal doesn't burn through the pool.
