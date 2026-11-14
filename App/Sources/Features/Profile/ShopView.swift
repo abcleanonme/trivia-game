@@ -145,23 +145,5 @@ private struct ShopTile: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    @ViewBuilder private var swatch: some View {
-        let look = CardLook(store: store, previewing: item)
-        switch item.slot {
-        case .avatar, .border:
-            AvatarView(avatar: look.avatar, border: look.border, name: look.name, size: 44)
-        case .cardBackground:
-            CardPattern(background: item)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.ink, lineWidth: 1.5))
-        case .cardShape:
-            CardShape(kind: item.shape ?? .rounded)
-                .stroke(Theme.ink, lineWidth: 2)
-                .frame(maxWidth: 84)
-        case .emblem:
-            Image(systemName: item.symbol ?? "circle.slash")
-                .font(.title.bold())
-                .foregroundStyle(item.symbol == nil ? Theme.muted : Theme.ink)
-        }
-    }
+    private var swatch: some View { CosmeticSwatch(item: item) }
 }
