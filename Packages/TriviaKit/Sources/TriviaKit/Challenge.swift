@@ -51,7 +51,9 @@ public enum ChallengeFinalResult: Equatable, Sendable {
 /// order, and the higher score wins. Ties break on correct answers.
 public struct ChallengeData: Codable, Equatable, Sendable {
     /// Bumped when the format changes, so old builds can say "update the app".
-    public static let currentVersion = 1
+    /// Version 2 added Survival and Speed challenges. A Classic challenge is
+    /// still written as version 1, so friends on older builds can play it.
+    public static let currentVersion = 2
 
     public let version: Int
     public let questions: [Question]
@@ -60,18 +62,42 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     public let powerUpLimit: Int
     /// nil for a mixed round.
     public let category: String?
+    /// nil in matches from before version 2, which were all Classic.
+    private let mode: GameMode?
+    /// The level the challenger picked; nil (older matches) means Mixed.
+    private let difficulty: Difficulty?
     public private(set) var turns: [ChallengeTurn]
 
     public init(questions: [Question], reserve: [Question], isTimed: Bool = true,
                 powerUpLimit: Int = GameRules.challengePowerUpsPerRound,
-                category: String? = nil, turns: [ChallengeTurn] = []) {
-        self.version = Self.currentVersion
+                category: String? = nil, mode: GameMode = .classic,
+                difficulty: Difficulty = .mixed, turns: [ChallengeTurn] = []) {
+        self.version = mode == .classic ? 1 : Self.currentVersion
         self.questions = questions
         self.reserve = reserve
-        self.isTimed = isTimed
+        // A Speed round is its clock.
+        self.isTimed = isTimed || mode == .speed
         self.powerUpLimit = powerUpLimit
         self.category = category
+        self.mode = mode
+        self.difficulty = difficulty
         self.turns = turns
+    }
+
+    public init(setup: ChallengeSetup, questions: [Question], reserve: [Question]) {
+        self.init(questions: questions, reserve: reserve, isTimed: setup.hasClock,
+                  powerUpLimit: setup.powerUpLimit, category: setup.category,
+                  mode: setup.mode, difficulty: setup.difficulty)
+    }
+
+    public var gameMode: GameMode { mode ?? .classic }
+    public var level: Difficulty { difficulty ?? .mixed }
+
+    /// The rules this match was made with, for a rematch on the same terms.
+    public var setup: ChallengeSetup {
+        ChallengeSetup(mode: gameMode, difficulty: level, category: category,
+                       length: gameMode == .classic ? questions.count : GameRules.questionsPerRound,
+                       isTimed: isTimed, powerUpLimit: powerUpLimit)
     }
 
     // MARK: Encoding
@@ -92,7 +118,7 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     /// A fresh session over the shared questions.
     public func makeSession() -> GameSession {
         GameSession(questions: questions, reserve: reserve,
-                    isTimed: isTimed, powerUpLimit: powerUpLimit)
+                    isTimed: isTimed, powerUpLimit: powerUpLimit, mode: gameMode)
     }
 
     public func turn(for playerID: String) -> ChallengeTurn? {

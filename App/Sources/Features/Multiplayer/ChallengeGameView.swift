@@ -97,6 +97,7 @@ struct ChallengeGameView: View {
     private func send(_ session: GameSession) {
         if !awarded {
             store.award(sparks: session.sparksEarned)
+            store.finishChallenge(session)
             awarded = true
         }
         stage = .sending(session)
@@ -180,10 +181,7 @@ private struct ChallengeIntroView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Space.m) {
-                    rule("list.number", "\(round.data.questions.count) questions, the same ones \(round.opponentName) gets")
-                    rule("timer", "\(Int(GameRules.questionTime)) seconds each. Answer fast for bonus points")
-                    rule("bolt.fill", "Up to \(round.data.powerUpLimit) power-ups from your own stock")
-                    rule("trophy", "Highest score wins. Ties go to more correct answers")
+                    ForEach(rules, id: \.text) { rule($0.icon, $0.text) }
                 }
                 .font(.subheadline)
                 .foregroundStyle(Theme.ink)
@@ -221,6 +219,33 @@ private struct ChallengeIntroView: View {
             .frame(maxWidth: .infinity)
             .background(Theme.paper)
         }
+    }
+
+    /// The match's rules, as the challenger set them.
+    private var rules: [(icon: String, text: String)] {
+        let data = round.data
+        let them = round.opponentName
+        var lines: [(icon: String, text: String)] = []
+        switch data.gameMode {
+        case .classic:
+            lines.append(("list.number", "\(data.questions.count) questions, the same ones \(them) gets"))
+        case .survival:
+            lines.append(("heart.fill", "Survival: keep going until you miss \(GameMode.survivalStrikes). Same questions as \(them)"))
+        case .speed:
+            lines.append(("stopwatch.fill", "Speed round: as many as you can in \(Int(GameMode.speedRoundSeconds)) seconds. Same questions as \(them)"))
+        }
+        let level = data.level == .mixed ? "Mixed levels" : "\(data.level.title) questions"
+        lines.append(("chart.bar.fill", data.category.map { "\(level) from \($0)" } ?? level))
+        if data.gameMode != .speed {
+            lines.append(data.isTimed
+                ? ("timer", "\(Int(GameRules.questionTime)) seconds each. Answer fast for bonus points")
+                : ("tortoise.fill", "No clock. Take your time on every question"))
+        }
+        lines.append(data.powerUpLimit > 0
+            ? ("bolt.fill", "Up to \(data.powerUpLimit) power-up\(data.powerUpLimit == 1 ? "" : "s") from your own stock")
+            : ("bolt.slash.fill", "No power-ups this time"))
+        lines.append(("trophy", "Highest score wins. Ties go to more correct answers"))
+        return lines
     }
 
     private func rule(_ icon: String, _ text: String) -> some View {

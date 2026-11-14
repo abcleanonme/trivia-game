@@ -26,6 +26,8 @@ struct ChallengeItem: Identifiable, Equatable {
     var myPoints: Int?
     var theirPoints: Int?
     var updated: Date
+    /// The rules, once the challenger has dealt.
+    var setup: ChallengeSetup?
 
     var isFinished: Bool { if case .finished = status { true } else { false } }
 }
@@ -62,6 +64,19 @@ final class GameCenter: NSObject {
     private(set) var auth: Auth = .checking
     private(set) var challenges: [ChallengeItem] = []
     private(set) var rivalries: ChallengeRivalryBook
+    /// Every finished challenge with both scores, newest first.
+    private(set) var history: ChallengeHistory
+    /// Rules for the next challenge you start. Remembered between launches.
+    var nextSetup: ChallengeSetup {
+        didSet {
+            if let data = try? JSONEncoder().encode(nextSetup) { defaults.set(data, forKey: Self.setupKey) }
+        }
+    }
+
+    // Friends hub (see GameCenter+Friends.swift).
+    var friends: [Friend] = []
+    var friendsAccess: FriendsAccess = .unknown
+    var boards: [FriendBoard: BoardState] = [:]
     private(set) var isLoading = false
     /// Drives the full-screen challenge cover.
     var activeRound: ChallengeRound?
@@ -70,8 +85,8 @@ final class GameCenter: NSObject {
     /// being offline doesn't pop up a dialog every time.
     private(set) var loadError: String?
 
-    @ObservationIgnored private let store: PlayerStore
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored let store: PlayerStore
+    @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored private var matches: [String: GKTurnBasedMatch] = [:]
     @ObservationIgnored private var signInController: UIViewController?
     @ObservationIgnored private var listening = false
@@ -81,6 +96,11 @@ final class GameCenter: NSObject {
     @ObservationIgnored private var busy: Set<String> = []
     @ObservationIgnored private var cache: [String: (stamp: String, data: ChallengeData?)] = [:]
     @ObservationIgnored let isDemo: Bool
+    /// Players seen in matches or the friends list, for starting a
+    /// challenge with someone straight from their page.
+    @ObservationIgnored var knownPlayers: [String: GKPlayer] = [:]
+    private static let historyKey = "challenge.history.v1"
+    private static let setupKey = "challenge.setup.v1"
     private static let rivalriesKey = "rivalries.v1"
     private static let pendingKey = "challenge.pendingTurns.v1"
     /// Turns played but not yet sent, by match ID. Kept on the phone so a
@@ -91,6 +111,18 @@ final class GameCenter: NSObject {
         self.store = store
         self.defaults = defaults
         self.isDemo = demo
+        if let data = defaults.data(forKey: Self.historyKey),
+           let saved = try? JSONDecoder().decode(ChallengeHistory.self, from: data) {
+            history = saved
+        } else {
+            history = ChallengeHistory()
+        }
+        if let data = defaults.data(forKey: Self.setupKey),
+           let saved = try? JSONDecoder().decode(ChallengeSetup.self, from: data) {
+            nextSetup = saved.sanitized()
+        } else {
+            nextSetup = .standard
+        }
         if let data = defaults.data(forKey: Self.rivalriesKey),
            let saved = try? JSONDecoder().decode(ChallengeRivalryBook.self, from: data) {
             rivalries = saved
@@ -102,6 +134,7 @@ final class GameCenter: NSObject {
             pending = saved
         }
         super.init()
+        store.onRoundRecorded = { [weak self] kind in self?.postScores(after: kind) }
         if demo { loadDemo() }
     }
 
@@ -186,6 +219,7 @@ final class GameCenter: NSObject {
             matches = byID
             challenges = items.sorted { $0.updated > $1.updated }
             loadError = nil
+            postScores(after: nil)
         } catch {
             loadError = Self.friendly(error, doing: "load your challenges")
         }
@@ -200,12 +234,13 @@ final class GameCenter: NSObject {
         let mine = match.participants.first { $0.player?.gamePlayerID == me }
         let opponent = match.participants.first { $0.player?.gamePlayerID != me }
         let name = opponent?.player?.displayName ?? "Someone new"
+        if let player = opponent?.player { knownPlayers[player.gamePlayerID] = player }
         let updated = match.participants.compactMap(\.lastTurnDate).max() ?? match.creationDate
         var item = ChallengeItem(id: match.matchID, opponentID: opponent?.player?.gamePlayerID,
                                  opponentName: name, status: .theirTurn,
                                  myPoints: data?.turn(for: me)?.points,
                                  theirPoints: opponent?.player.flatMap { data?.turn(for: $0.gamePlayerID)?.points },
-                                 updated: updated)
+                                 updated: updated, setup: data?.setup)
         if let data, !data.isSupported {
             item.status = .needsUpdate
             return item
@@ -215,11 +250,15 @@ final class GameCenter: NSObject {
         case .ended:
             let outcome = mine.flatMap { Self.outcome(from: $0.matchOutcome) }
             item.status = .finished(outcome)
-            if let outcome, let opponentID = item.opponentID,
-               data?.isContested(between: me, and: opponentID) ?? false {
+            if let outcome, let opponentID = item.opponentID, let data,
+               data.isContested(between: me, and: opponentID) {
                 addToRivalries(outcome, matchID: match.matchID, opponentID: opponentID,
                                name: name, playedAt: updated)
+                addToHistory(ChallengeGame(matchID: match.matchID, data: data, me: me,
+                                           opponentID: opponentID, opponentName: name,
+                                           outcome: outcome, playedAt: updated))
             }
+            item.setup = data?.setup
         case _ where mine?.status == .invited:
             item.status = .invited
         case _ where myTurn:
@@ -272,7 +311,7 @@ final class GameCenter: NSObject {
         try await show(match)
     }
 
-    private func show(_ match: GKTurnBasedMatch) async throws {
+    private func show(_ match: GKTurnBasedMatch, setup: ChallengeSetup? = nil) async throws {
         let me = localPlayerID
         var data: ChallengeData
         if let existing = await challengeData(of: match, useCache: false) {
@@ -280,7 +319,7 @@ final class GameCenter: NSObject {
         } else if match.currentParticipant?.player?.gamePlayerID == me {
             // A brand-new match we started: deal now and save straight away,
             // so backing out and coming back can't re-roll the questions.
-            data = store.newChallenge()
+            data = store.newChallenge(setup ?? nextSetup)
             try await match.saveCurrentTurn(withMatch: data.encoded())
         } else {
             return
@@ -409,14 +448,16 @@ final class GameCenter: NSObject {
         try await submit(session, in: round)
     }
 
-    /// Starts a new match with the same friend and opens it.
+    /// Starts a new match with the same friend, on the same rules, and opens it.
     func rematch(_ matchID: String) async {
         if isDemo { return rematchDemo(matchID) }
         do {
             let old = try await GKTurnBasedMatch.load(withID: matchID)
+            // Same rules as last time.
+            let setup = await challengeData(of: old)?.setup
             let next = try await old.rematch()
             matches[next.matchID] = next
-            try await show(next)
+            try await show(next, setup: setup)
             await refresh()
         } catch {
             errorMessage = Self.friendly(error, doing: "start a rematch")
@@ -476,7 +517,9 @@ final class GameCenter: NSObject {
         let request = GKMatchRequest()
         request.minPlayers = 2
         request.maxPlayers = 2
-        request.inviteMessage = "Think you know more than me? Play my Quizio round."
+        request.inviteMessage = nextSetup.isCustom
+            ? "Think you know more than me? Play my Quizio round: \(nextSetup.summary)."
+            : "Think you know more than me? Play my Quizio round."
         if !players.isEmpty { request.recipients = players }
         let picker = GKTurnBasedMatchmakerViewController(matchRequest: request)
         picker.turnBasedMatchmakerDelegate = self
@@ -543,6 +586,13 @@ final class GameCenter: NSObject {
         store.recordMatch(result, against: opponentID, name: name)
         if let data = try? JSONEncoder().encode(rivalries) {
             defaults.set(data, forKey: Self.rivalriesKey)
+        }
+    }
+
+    private func addToHistory(_ game: ChallengeGame?) {
+        guard let game, history.add(game) else { return }
+        if let data = try? JSONEncoder().encode(history) {
+            defaults.set(data, forKey: Self.historyKey)
         }
     }
 
@@ -692,6 +742,22 @@ private extension GameCenter {
                      playedAt: now.addingTimeInterval(Double(-i) * 3_600))
         }
         rivalries = book
+        var log = ChallengeHistory()
+        let demoGames: [(String, String, ChallengeOutcome, Int, Int, ChallengeSetup)] = [
+            ("maya", "Maya", .won, 1_360, 1_020, .standard),
+            ("maya", "Maya", .won, 1_180, 1_150, ChallengeSetup(difficulty: .hard)),
+            ("maya", "Maya", .lost, 940, 1_210, ChallengeSetup(mode: .speed)),
+            ("sam", "Sam", .lost, 870, 1_190, ChallengeSetup(category: "Science", length: 15)),
+            ("jordan", "Jordan", .tied, 1_000, 1_000, ChallengeSetup(isTimed: false)),
+        ]
+        for (i, g) in demoGames.enumerated() {
+            log.add(ChallengeGame(matchID: "demo\(i)", opponentID: g.0, opponentName: g.1, outcome: g.2,
+                                  myPoints: g.3, theirPoints: g.4, myCorrect: g.3 / 140, theirCorrect: g.4 / 140,
+                                  questionCount: g.5.questionCount, setup: g.5,
+                                  playedAt: now.addingTimeInterval(Double(-i) * 3_600 - 86_400)))
+        }
+        history = log
+        loadDemoFriends()
     }
 
     func demoRound(for item: ChallengeItem, data: ChallengeData) -> ChallengeRound {

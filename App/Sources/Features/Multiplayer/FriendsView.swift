@@ -1,12 +1,22 @@
 import SwiftUI
 import TriviaKit
 
-/// The Friends lobby: start a challenge, see whose turn it is, rematch, and
-/// your head-to-head record with each friend. Async "take turns" play over
-/// Game Center; live rounds come later.
+/// The Friends tab: a social hub over Game Center. Three sections:
+/// challenges (start one with your own rules, whose turn it is, rematch),
+/// friends-only leaderboards (today's Daily and lifetime stats), and your
+/// friends with head-to-head history against each.
 struct FriendsView: View {
+    enum Section: String, CaseIterable, Identifiable {
+        case play = "Challenges"
+        case boards = "Leaderboards"
+        case friends = "Friends"
+        var id: String { rawValue }
+    }
+
     @Environment(GameCenter.self) private var gameCenter
     @Environment(\.dynamicTypeSize) private var typeSize
+    @SceneStorage("friends.section") private var section: Section = .play
+    @State private var editingRules = false
 
     var body: some View {
         ScrollView {
@@ -25,11 +35,24 @@ struct FriendsView: View {
                     notice("Multiplayer is turned off",
                            "Screen Time or a device profile blocks multiplayer games. Solo rounds still work.")
                 case .signedIn:
-                    if let loadError = gameCenter.loadError {
+                    Picker("Section", selection: $section) {
+                        ForEach(Section.allCases) { s in
+                            Text(s.rawValue).tag(s)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    if let loadError = gameCenter.loadError, section != .boards {
                         loadErrorBanner(loadError)
                     }
-                    challengeCard
-                    lobby
+                    switch section {
+                    case .play:
+                        challengeCard
+                        lobby
+                    case .boards:
+                        FriendBoardsView()
+                    case .friends:
+                        FriendsListView()
+                    }
                 }
             }
             .padding(.horizontal, Theme.gutter)
@@ -40,8 +63,17 @@ struct FriendsView: View {
         }
         .background(Theme.paper)
         .toolbar(.hidden, for: .navigationBar)
-        .refreshable { await gameCenter.refresh() }
-        .task { await gameCenter.refresh() }
+        .refreshable {
+            await gameCenter.refresh()
+            await gameCenter.loadFriends()
+        }
+        .task {
+            await gameCenter.refresh()
+            await gameCenter.loadFriends()
+        }
+        .sheet(isPresented: $editingRules) {
+            ChallengeSetupSheet(startTitle: "Pick a friend") { gameCenter.newChallenge() }
+        }
         .alert("Something went wrong",
                isPresented: Binding(get: { gameCenter.errorMessage != nil },
                                     set: { if !$0 { gameCenter.errorMessage = nil } })) {
@@ -56,31 +88,55 @@ struct FriendsView: View {
     private var challengeCard: some View {
         // Same shape as Home's mode card: text with the action beside it,
         // stacking at accessibility sizes.
+        let setup = gameCenter.nextSetup
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.m))
             : AnyLayout(HStackLayout(alignment: .center, spacing: Space.m))
-        return layout {
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text("Take turns")
-                    .eyebrow()
-                    .opacity(0.9)
-                Text("Challenge a friend.")
-                    .font(Theme.display(.title2))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("You play 10, they play the same 10 when they like. Highest score wins.")
-                    .font(.footnote)
-                    .opacity(0.92)
-                    .fixedSize(horizontal: false, vertical: true)
+        return VStack(alignment: .leading, spacing: Space.m) {
+            layout {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Text("Take turns")
+                        .eyebrow()
+                        .opacity(0.9)
+                    Text("Challenge a friend.")
+                        .font(Theme.display(.title2))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("You play first, they play the same questions when they like. Highest score wins.")
+                        .font(.footnote)
+                        .opacity(0.92)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button { gameCenter.newChallenge() } label: {
+                    Label("New", systemImage: "plus")
+                        .font(.title3.bold())
+                        .padding(.horizontal, Space.l)
+                        .frame(minHeight: 52)
+                }
+                .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
+                .accessibilityLabel("New challenge")
+                .accessibilityHint(setup.summary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Button { gameCenter.newChallenge() } label: {
-                Label("New", systemImage: "plus")
-                    .font(.title3.bold())
-                    .padding(.horizontal, Space.l)
-                    .frame(minHeight: 52)
+            // The rules the next challenge uses, one tap to change.
+            Button { editingRules = true } label: {
+                HStack(spacing: Space.s) {
+                    Image(systemName: "slider.horizontal.3").accessibilityHidden(true)
+                    Text(setup.summary)
+                        .font(.footnote.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: Space.s)
+                    Text("Rules").font(.footnote.bold())
+                    Image(systemName: "chevron.right").font(.caption.bold()).accessibilityHidden(true)
+                }
+                .padding(.horizontal, Space.m)
+                .frame(minHeight: 40)
+                .background(Theme.pill.fill(.white.opacity(0.16)))
+                .contentShape(Theme.pill)
             }
-            .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
-            .accessibilityLabel("New challenge")
+            .buttonStyle(.plain)
+            .accessibilityLabel("Challenge rules: \(setup.summary)")
+            .accessibilityHint("Change difficulty, length, mode and more")
         }
         .foregroundStyle(.white)
         .padding(Theme.cardPadding)
@@ -96,7 +152,7 @@ struct FriendsView: View {
                 .accessibilityHidden(true)
             Text("Sign in to Game Center")
                 .font(Theme.display(.title2))
-            Text("Challenges, friends and head-to-head records use your Game Center account. No new account, no ads.")
+            Text("Challenges, friends, leaderboards and head-to-head records use your Game Center account. No new account, no ads.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -158,14 +214,20 @@ struct FriendsView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.muted)
         }
-        section("Your turn", yourTurn)
-        section("Waiting on them", waiting)
-        section("Finished", Array(finished.prefix(10)))
-        rivals
+        ChallengeSection(title: "Your turn", items: yourTurn)
+        ChallengeSection(title: "Waiting on them", items: waiting)
+        ChallengeSection(title: "Finished", items: Array(finished.prefix(10)))
     }
+}
 
-    @ViewBuilder
-    private func section(_ title: String, _ items: [ChallengeItem]) -> some View {
+/// A titled list of challenge rows.
+struct ChallengeSection: View {
+    let title: String
+    let items: [ChallengeItem]
+
+    @Environment(GameCenter.self) private var gameCenter
+
+    var body: some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Space.s) {
                 SectionLabel(title)
@@ -173,32 +235,6 @@ struct FriendsView: View {
                     ChallengeRow(item: item,
                                  record: item.opponentID.flatMap(gameCenter.rivalries.record(against:)))
                 }
-            }
-        }
-    }
-
-    @ViewBuilder private var rivals: some View {
-        let rivals = gameCenter.rivalries.rivals
-        if !rivals.isEmpty {
-            VStack(alignment: .leading, spacing: Space.s) {
-                SectionLabel("Head to head")
-                VStack(spacing: 0) {
-                    ForEach(Array(rivals.enumerated()), id: \.element.id) { i, rival in
-                        if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                        HStack(spacing: 12) {
-                            PlayerBadge(name: rival.record.displayName, size: 36)
-                            Text(rival.record.displayName).font(.headline)
-                            Spacer(minLength: 8)
-                            RecordChip(record: rival.record)
-                        }
-                        .padding(.vertical, 10)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-                .foregroundStyle(Theme.ink)
-                .padding(.horizontal, Theme.cardPadding)
-                .padding(.vertical, Space.xs)
-                .card()
             }
         }
     }
@@ -257,6 +293,12 @@ private struct ChallengeRow: View {
                     .font(.footnote)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let setup = item.setup, setup.isCustom {
+                    Text(setup.summary)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .contentShape(Rectangle())
@@ -332,7 +374,7 @@ private struct ChallengeRow: View {
 }
 
 /// "3–1" with a small trophy, for head-to-head records.
-private struct RecordChip: View {
+struct RecordChip: View {
     let record: HeadToHead
 
     var body: some View {
