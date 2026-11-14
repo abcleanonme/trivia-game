@@ -3,7 +3,7 @@
 An ad-free trivia game for iPhone and iPad, built in SwiftUI, with
 async "challenge a friend" multiplayer over Game Center.
 
-- **Minimum OS:** iOS 27.1
+- **Minimum OS:** iOS 18 (iPhone Duo features need iOS 27.1)
 - **Devices:** all iPhones (including full **iPhone Duo** support) and iPad
 - **No ads, no ad SDKs, no tracking.**
 

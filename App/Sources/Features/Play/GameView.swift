@@ -10,10 +10,13 @@ struct GameView: View {
     @Environment(PlayerStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var current: RoundRequest
     @State private var session: GameSession?
     @State private var rewards: RoundRewards?
     @State private var alreadyPlayed = false
+    /// Bumped on Play again so the quiz screen arrives fresh.
+    @State private var round = 0
 
     init(request: RoundRequest, relaxed: Bool) {
         self.request = request
@@ -26,8 +29,11 @@ struct GameView: View {
             if let session {
                 if session.phase == .finished {
                     summary(session)
+                        .transition(.pop(reduce: reduceMotion))
                 } else {
                     quiz(session)
+                        .id(round)
+                        .transition(.motion(.trailing, reduce: reduceMotion))
                 }
             } else if alreadyPlayed {
                 ContentUnavailableView {
@@ -40,6 +46,8 @@ struct GameView: View {
                 }
             }
         }
+        .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: session?.phase == .finished)
+        .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: round)
         .background(Theme.paper.ignoresSafeArea())
         .onAppear { if session == nil { start() } }
         .onChange(of: session?.phase == .finished) { _, finished in
@@ -80,6 +88,7 @@ struct GameView: View {
         rewards = nil
         session = store.newSession(for: current, relaxed: relaxed)
         alreadyPlayed = session == nil
+        round += 1
         #if DEBUG
         // Screenshot helper: launch with `-autoplaySummary` to jump straight
         // to the results screen (answers alternate right and wrong).
