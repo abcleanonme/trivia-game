@@ -23,12 +23,16 @@ between launches:
 
 This data never leaves your device. Deleting the app deletes it.
 
-## Multiplayer (coming later)
+## Multiplayer and friends
 
-Future versions will add multiplayer through Apple's Game Center. If you
-choose to use it, Game Center handles your player identity and match data
-under [Apple's privacy policy](https://www.apple.com/legal/privacy/). We will
-update this policy before that ships.
+Friend challenges and leaderboards use Apple's Game Center. If you choose to
+use them, Game Center handles your player identity, match data and scores
+under [Apple's privacy policy](https://www.apple.com/legal/privacy/). Quizio
+posts your Daily score, Daily streak, challenge wins, correct answers and best
+Survival and Speed rounds to Game Center leaderboards, where your Game Center
+friends can see them. If you allow it, Quizio reads your Game Center friends
+list to show who you can challenge; it isn't sent anywhere else. Your
+head-to-head history stays on your device.
 
 ## Children
 

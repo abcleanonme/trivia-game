@@ -214,11 +214,14 @@ struct HomeView: View {
 
 /// A labeled row of compact pill choices on the accent card. The label sits
 /// beside the pills so each option set takes a single line.
-private struct OptionRow<Option: Hashable>: View {
+struct OptionRow<Option: Hashable>: View {
     let label: String
     let options: [Option]
     @Binding var selection: Option
     let title: KeyPath<Option, String>
+    /// For light cards: the picked chip is the blue one. Home's blue card
+    /// uses the default, where the picked chip is white.
+    var inverted = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .caption) private var labelWidth: CGFloat = 44
@@ -242,8 +245,8 @@ private struct OptionRow<Option: Hashable>: View {
                             .frame(minHeight: 36)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.card : Theme.accent,
-                                                   foreground: on ? Theme.ink : .white,
+                    .buttonStyle(ChunkyButtonStyle(fill: on != inverted ? Theme.card : Theme.accent,
+                                                   foreground: on != inverted ? Theme.ink : .white,
                                                    shape: AnyShape(Theme.pill),
                                                    depth: on ? 3 : 2))
                     .accessibilityAddTraits(on ? .isSelected : [])

@@ -40,6 +40,9 @@ final class PlayerStore {
     /// Every question the player has been shown, oldest first, so rounds
     /// deal unseen questions until a pool is used up, then the oldest.
     @ObservationIgnored private var seen: SeenQuestions
+    /// Called after a solo, Daily or event round is credited, so Game
+    /// Center can post the new scores to friends' leaderboards.
+    @ObservationIgnored var onRoundRecorded: (@MainActor (RoundKind) -> Void)?
     private static let walletKey = "wallet.v1"
     private static let progressKey = "progress.v1"
     private static let seenKey = "seenQuestions.v1"
@@ -119,15 +122,24 @@ final class PlayerStore {
         wallet.earn(sparks: rewards.sparks)
         save()
         saveProgress()
+        onRoundRecorded?(kind)
         return rewards
     }
 
-    /// Questions for a new friend challenge. Always timed: relaxed mode is
-    /// solo and Daily only, so both players race the same clock.
-    func newChallenge() -> ChallengeData {
-        let round = bank.dealRound(reserve: GameRules.challengePowerUpsPerRound, seen: seen)
-        remember(round.questions[...])
-        return ChallengeData(questions: round.questions, reserve: round.reserve)
+    /// Questions for a new friend challenge, under the rules the challenger
+    /// picked. Both players get exactly these.
+    func newChallenge(_ setup: ChallengeSetup = .standard) -> ChallengeData {
+        let setup = setup.sanitized()
+        let round = bank.dealRound(count: setup.questionCount, reserve: setup.reserveCount,
+                                   category: setup.category, difficulty: setup.difficulty.tag, seen: seen)
+        remember(round.questions.prefix(GameRules.questionsPerRound))
+        return ChallengeData(setup: setup, questions: round.questions, reserve: round.reserve)
+    }
+
+    /// Marks a played challenge's questions as seen. Long rounds deal more
+    /// than most players reach, so only the ones shown count.
+    func finishChallenge(_ session: GameSession) {
+        remember(session.shownQuestions[...])
     }
 
     private func remember(_ questions: ArraySlice<Question>) {
