@@ -80,6 +80,19 @@ struct GameView: View {
         rewards = nil
         session = store.newSession(for: current, relaxed: relaxed)
         alreadyPlayed = session == nil
+        #if DEBUG
+        // Screenshot helper: launch with `-autoplaySummary` to jump straight
+        // to the results screen (answers alternate right and wrong).
+        if ProcessInfo.processInfo.arguments.contains("-autoplaySummary"), var s = session {
+            var i = 0
+            while let q = s.currentQuestion {
+                s.answer(i % 3 == 2 ? (q.correctIndex + 1) % q.choices.count : q.correctIndex)
+                s.advance()
+                i += 1
+            }
+            session = s
+        }
+        #endif
     }
 
     private func playAgain() {
