@@ -30,6 +30,11 @@ struct ProfileView: View {
                         }
                         .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
                     }
+                    NavigationLink { PowerUpShopView() } label: {
+                        Label("Power-up shop", systemImage: "bolt.fill")
+                            .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.chunky(fill: Theme.card, capsule: true))
                 }
 
                 section("Daily") {

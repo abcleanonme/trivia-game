@@ -184,7 +184,18 @@ struct HomeView: View {
 
     private var powerUps: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("Your power-ups")
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel("Your power-ups")
+                Spacer()
+                NavigationLink { PowerUpShopView() } label: {
+                    Label("Get more", systemImage: "bolt.fill")
+                        .font(.footnote.weight(.bold))
+                        .padding(.horizontal, Space.m)
+                        .frame(minHeight: 32)
+                }
+                .buttonStyle(ChunkyButtonStyle(fill: Theme.spark, foreground: Theme.onSpark,
+                                               shape: AnyShape(Theme.pill), depth: 2))
+            }
             FlowLayout(spacing: 6) {
                 ForEach(PowerUp.allCases) { p in
                     let count = store.wallet.count(of: p)

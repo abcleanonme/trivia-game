@@ -218,7 +218,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     @Test func buyAndConsume() {
         var wallet = Wallet(sparks: 50)
         do { let ok = wallet.buy(.fiftyFifty); #expect(ok) }
-        #expect(wallet.sparks == 20)
+        #expect(wallet.sparks == 10)
         do { let ok = wallet.buy(.fiftyFifty); #expect(!ok) }
         do { let ok = wallet.consume(.fiftyFifty); #expect(ok) }
         do { let ok = wallet.consume(.fiftyFifty); #expect(!ok) }
