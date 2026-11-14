@@ -257,7 +257,9 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
 
     @Test func themesArePricedAndAnimated() {
         let themes = CosmeticCatalog.items(in: .theme)
-        #expect(themes.count >= 5)
+        #expect(themes.count >= 15)
+        // Every animation style is used by at least one theme.
+        #expect(Set(themes.compactMap(\.motion)) == Set(Cosmetic.Motion.allCases))
         #expect(themes.allSatisfy { $0.motion != nil })
         for theme in themes where theme.unlock != .starter {
             #expect((300...600).contains(theme.price ?? 0))
