@@ -25,6 +25,9 @@ struct FriendsView: View {
                     notice("Multiplayer is turned off",
                            "Screen Time or a device profile blocks multiplayer games. Solo rounds still work.")
                 case .signedIn:
+                    if let loadError = gameCenter.loadError {
+                        loadErrorBanner(loadError)
+                    }
                     challengeCard
                     lobby
                 }
@@ -101,6 +104,24 @@ struct FriendsView: View {
         .card()
     }
 
+    private func loadErrorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Theme.wrong)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Retry") { Task { await gameCenter.refresh() } }
+                .font(.subheadline.bold())
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(16)
+        .card(radius: 20)
+    }
+
     private func notice(_ title: String, _ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
@@ -120,7 +141,11 @@ struct FriendsView: View {
         let waiting = items.filter { [.theirTurn, .findingOpponent, .declined, .needsUpdate].contains($0.status) }
         let finished = items.filter(\.isFinished)
 
-        if items.isEmpty && !gameCenter.isLoading {
+        if items.isEmpty && gameCenter.isLoading {
+            ProgressView("Loading challenges…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+        } else if items.isEmpty && gameCenter.loadError == nil {
             Text("No challenges yet. Start one above, and it shows up here.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.muted)
@@ -244,6 +269,10 @@ private struct ChallengeRow: View {
             return "Declined the challenge"
         case .needsUpdate:
             return "Update Quizio to play this one"
+        case .finished where item.theirPoints == nil:
+            return "\(item.opponentName) didn't play · not counted"
+        case .finished where item.myPoints == nil:
+            return "You didn't play · not counted"
         case .finished(let outcome):
             let score = "\((item.myPoints ?? 0).formatted())–\((item.theirPoints ?? 0).formatted())"
             switch outcome {

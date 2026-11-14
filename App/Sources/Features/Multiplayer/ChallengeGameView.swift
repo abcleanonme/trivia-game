@@ -53,6 +53,8 @@ struct ChallengeGameView: View {
                 } actions: {
                     Button("Try again") { send(session) }
                         .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+                    Button("Send it later") { dismiss() }
+                        .buttonStyle(.chunky(fill: Theme.card, capsule: true))
                 }
             case .result(let data):
                 ChallengeResultView(round: round, data: data, me: me,
@@ -63,8 +65,15 @@ struct ChallengeGameView: View {
         }
         .background(Theme.paper.ignoresSafeArea())
         .onAppear {
-            // Opening a match we've already played goes straight to the result.
-            if case .intro = stage, round.data.hasPlayed(me) { stage = .result(round.data) }
+            // Opening a match we've already played goes straight to the
+            // result; one played offline goes straight to sending it.
+            guard case .intro = stage else { return }
+            if round.data.hasPlayed(me) {
+                stage = .result(round.data)
+            } else if gameCenter.hasPendingTurn(round.id) {
+                awarded = true
+                send(round.data.makeSession())
+            }
         }
         .task { await runClock() }
         .interactiveDismissDisabled()
@@ -95,7 +104,12 @@ struct ChallengeGameView: View {
             do {
                 stage = .result(try await gameCenter.submit(session, in: round))
             } catch {
-                stage = .failed(session, error.localizedDescription)
+                if case ChallengeError.notYourTurn = error {
+                    stage = .failed(session, GameCenter.friendly(error, doing: "send your score"))
+                } else {
+                    stage = .failed(session, GameCenter.friendly(error, doing: "send your score")
+                                    + " Your score is saved on this phone and sends by itself next time you open Friends.")
+                }
             }
         }
     }
