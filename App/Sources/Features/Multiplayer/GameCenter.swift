@@ -66,14 +66,26 @@ final class GameCenter: NSObject {
     /// Drives the full-screen challenge cover.
     var activeRound: ChallengeRound?
     var errorMessage: String?
+    /// Why the lobby couldn't load, shown inline instead of an alert so
+    /// being offline doesn't pop up a dialog every time.
+    private(set) var loadError: String?
 
     @ObservationIgnored private let store: PlayerStore
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var matches: [String: GKTurnBasedMatch] = [:]
     @ObservationIgnored private var signInController: UIViewController?
     @ObservationIgnored private var listening = false
+    @ObservationIgnored private var queuedRefresh: Task<Void, Never>?
+    @ObservationIgnored private var latestRefresh: Task<Void, Never>?
+    /// Matches we're sending a turn for, so a lobby refresh leaves them alone.
+    @ObservationIgnored private var busy: Set<String> = []
+    @ObservationIgnored private var cache: [String: (stamp: String, data: ChallengeData?)] = [:]
     @ObservationIgnored let isDemo: Bool
     private static let rivalriesKey = "rivalries.v1"
+    private static let pendingKey = "challenge.pendingTurns.v1"
+    /// Turns played but not yet sent, by match ID. Kept on the phone so a
+    /// dropped connection never loses a score or lets a round be replayed.
+    @ObservationIgnored private var pending: [String: ChallengeTurn] = [:]
 
     init(store: PlayerStore, defaults: UserDefaults = .standard, demo: Bool = GameCenter.demoRequested) {
         self.store = store
@@ -85,9 +97,16 @@ final class GameCenter: NSObject {
         } else {
             rivalries = ChallengeRivalryBook()
         }
+        if let data = defaults.data(forKey: Self.pendingKey),
+           let saved = try? JSONDecoder.challenge.decode([String: ChallengeTurn].self, from: data) {
+            pending = saved
+        }
         super.init()
         if demo { loadDemo() }
     }
+
+    /// Challenges waiting on us, for the Friends tab badge.
+    var yourTurnCount: Int { challenges.filter { $0.status == .yourTurn || $0.status == .invited }.count }
 
     var localPlayerID: String { isDemo ? "me" : GKLocalPlayer.local.gamePlayerID }
     var localPlayerName: String { isDemo ? "You" : GKLocalPlayer.local.displayName }
@@ -132,29 +151,50 @@ final class GameCenter: NSObject {
 
     // MARK: Lobby
 
+    /// Reloads the lobby from Game Center. Calls that arrive while a load is
+    /// running are folded into one follow-up load, so overlapping refreshes
+    /// (turn events, pull to refresh, coming back to the app) can't race
+    /// each other or close out the same match twice.
     func refresh() async {
         guard !isDemo, auth == .signedIn else { return }
+        if let queued = queuedRefresh { return await queued.value }
+        let running = latestRefresh
+        let task = Task { @MainActor [weak self] in
+            await running?.value
+            guard let self else { return }
+            self.queuedRefresh = nil
+            await self.reload()
+        }
+        queuedRefresh = task
+        latestRefresh = task
+        await task.value
+    }
+
+    private func reload() async {
         isLoading = true
         defer { isLoading = false }
+        await sendPendingTurns()
         do {
             let loaded = try await GKTurnBasedMatch.loadMatches()
             var items: [ChallengeItem] = []
             var byID: [String: GKTurnBasedMatch] = [:]
             for match in loaded {
                 byID[match.matchID] = match
-                let data = await Self.challengeData(of: match)
+                let data = await challengeData(of: match)
                 if let item = await item(for: match, data: data) { items.append(item) }
             }
             matches = byID
             challenges = items.sorted { $0.updated > $1.updated }
+            loadError = nil
         } catch {
-            errorMessage = "Couldn't load your challenges. \(error.localizedDescription)"
+            loadError = Self.friendly(error, doing: "load your challenges")
         }
     }
 
     /// Builds the lobby row, and tidies up matches that need it: counts
-    /// finished ones in the head-to-head record, and closes out a match
-    /// that came back to us because the other player quit.
+    /// finished ones in the head-to-head record, and moves on a match that
+    /// is stuck with us (the friend declined or ran out of time, or our
+    /// last send didn't get through).
     private func item(for match: GKTurnBasedMatch, data: ChallengeData?) async -> ChallengeItem? {
         let me = localPlayerID
         let mine = match.participants.first { $0.player?.gamePlayerID == me }
@@ -175,16 +215,22 @@ final class GameCenter: NSObject {
         case .ended:
             let outcome = mine.flatMap { Self.outcome(from: $0.matchOutcome) }
             item.status = .finished(outcome)
-            if let outcome, let opponentID = item.opponentID {
+            if let outcome, let opponentID = item.opponentID,
+               data?.isContested(between: me, and: opponentID) ?? false {
                 addToRivalries(outcome, matchID: match.matchID, opponentID: opponentID,
                                name: name, playedAt: updated)
             }
         case _ where mine?.status == .invited:
             item.status = .invited
         case _ where myTurn:
-            if let data, data.hasPlayed(me) {
-                // Back to us after we played: everyone else quit, so we win.
-                if let finished = try? await finish(match, data: data) { return finished }
+            if let data, data.hasPlayed(me), !busy.contains(match.matchID) {
+                // We already played but the turn is still ours: pass it on
+                // again, or close the match if nobody is left to play.
+                busy.insert(match.matchID)
+                defer { busy.remove(match.matchID) }
+                if (try? await passOrFinish(match, data: data)) != nil {
+                    return await self.item(for: match, data: data)
+                }
             }
             item.status = .yourTurn
         case _ where opponent?.player == nil:
@@ -200,23 +246,36 @@ final class GameCenter: NSObject {
     /// Opens a lobby row: the round if it's our turn, or the result.
     func open(_ item: ChallengeItem) async {
         if isDemo { return openDemo(item) }
-        guard let match = matches[item.id] else { return }
-        do {
-            var match = match
-            if item.status == .invited {
-                match = try await match.acceptInvite()
-                matches[match.matchID] = match
-            }
-            try await show(match)
-        } catch {
-            errorMessage = "Couldn't open that challenge. \(error.localizedDescription)"
+        if item.status == .needsUpdate {
+            errorMessage = "\(item.opponentName) has a newer Quizio. Update the app from TestFlight or the App Store to play this one."
+            return
         }
+        do {
+            let match = try await GKTurnBasedMatch.load(withID: item.id)
+            matches[match.matchID] = match
+            try await presentMatch(match)
+        } catch {
+            errorMessage = Self.friendly(error, doing: "open that challenge")
+        }
+    }
+
+    /// Shows a match full screen, accepting the invite first if needed.
+    /// Never replaces a round that's being played.
+    private func presentMatch(_ match: GKTurnBasedMatch) async throws {
+        guard activeRound == nil else { return }
+        var match = match
+        let me = localPlayerID
+        if match.participants.first(where: { $0.player?.gamePlayerID == me })?.status == .invited {
+            match = try await match.acceptInvite()
+            matches[match.matchID] = match
+        }
+        try await show(match)
     }
 
     private func show(_ match: GKTurnBasedMatch) async throws {
         let me = localPlayerID
         var data: ChallengeData
-        if let existing = await Self.challengeData(of: match) {
+        if let existing = await challengeData(of: match, useCache: false) {
             data = existing
         } else if match.currentParticipant?.player?.gamePlayerID == me {
             // A brand-new match we started: deal now and save straight away,
@@ -226,6 +285,11 @@ final class GameCenter: NSObject {
         } else {
             return
         }
+        if !data.isSupported {
+            errorMessage = "This challenge needs a newer Quizio. Update the app to play it."
+            return
+        }
+        guard activeRound == nil else { return }
         let opponent = match.participants.first { $0.player?.gamePlayerID != me }
         activeRound = ChallengeRound(
             id: match.matchID, data: data,
@@ -237,49 +301,106 @@ final class GameCenter: NSObject {
     // MARK: Playing
 
     /// Saves our turn and passes the match on, or ends it if we were last.
-    /// Returns the updated data so the result screen can show both scores.
+    /// Safe to retry: if an earlier attempt already got through, this just
+    /// returns what's on Game Center. Returns the updated data so the result
+    /// screen can show both scores.
     func submit(_ session: GameSession, in round: ChallengeRound) async throws -> ChallengeData {
-        let turn = ChallengeTurn(playerID: localPlayerID, session: session)
+        let turn = pending[round.id] ?? ChallengeTurn(playerID: localPlayerID, session: session)
         if isDemo { return submitDemo(turn, in: round) }
-        guard let match = matches[round.id] else { throw ChallengeError.matchMissing }
-        // Reload so a stale copy can't drop the other player's turn.
-        var data = await Self.challengeData(of: match) ?? round.data
-        data.record(turn)
-        let me = localPlayerID
-        let waiting = match.participants.filter { p in
-            guard p.player?.gamePlayerID != me, p.matchOutcome != .quit,
-                  p.status != .declined, p.status != .done else { return false }
-            return p.player.map { !data.hasPlayed($0.gamePlayerID) } ?? true
-        }
-        if waiting.isEmpty {
-            _ = try await finish(match, data: data)
-        } else {
-            match.message = "\(localPlayerName) scored \(turn.points.formatted()). Your turn!"
-            try await match.endTurn(withNextParticipants: waiting,
-                                    turnTimeout: GKTurnTimeoutDefault,
-                                    match: data.encoded())
-        }
+        setPending(turn, for: round.id)
+        let data = try await send(turn, matchID: round.id, fallback: round.data)
         await refresh()
         return data
     }
 
-    /// Sets everyone's outcome from the scores and ends the match.
-    private func finish(_ match: GKTurnBasedMatch, data: ChallengeData) async throws -> ChallengeItem? {
-        let active = match.participants.filter { $0.matchOutcome != .quit }
-        let ids = active.compactMap { $0.player?.gamePlayerID }
-        for p in active {
+    private func send(_ turn: ChallengeTurn, matchID: String, fallback: ChallengeData?) async throws -> ChallengeData {
+        busy.insert(matchID)
+        defer { busy.remove(matchID) }
+        // Always work on a fresh copy: a match object from before the round
+        // can be out of date, and Game Center rejects turns made on it.
+        let match = try await GKTurnBasedMatch.load(withID: matchID)
+        matches[match.matchID] = match
+        guard var data = await challengeData(of: match, useCache: false) ?? fallback else {
+            throw ChallengeError.matchMissing
+        }
+        let me = localPlayerID
+        let stillOurs = match.status != .ended && match.currentParticipant?.player?.gamePlayerID == me
+        if data.hasPlayed(me) && !stillOurs {
+            // An earlier send went through; nothing more to do.
+            setPending(nil, for: matchID)
+            return data
+        }
+        guard stillOurs else {
+            setPending(nil, for: matchID)
+            throw ChallengeError.notYourTurn
+        }
+        data.record(turn)
+        // Store the score on Game Center first, so a dropped connection
+        // while passing the turn can't lose it. The lobby finishes the
+        // hand-off next time it loads.
+        try await match.saveCurrentTurn(withMatch: data.encoded())
+        setPending(nil, for: matchID)
+        cache[match.matchID] = nil
+        try? await passOrFinish(match, data: data, message: "\(localPlayerName) scored \(turn.points.formatted()). Your turn!")
+        return data
+    }
+
+    /// Whether this match has a played round waiting to send.
+    func hasPendingTurn(_ matchID: String) -> Bool { pending[matchID] != nil }
+
+    private func setPending(_ turn: ChallengeTurn?, for matchID: String) {
+        pending[matchID] = turn
+        if let data = try? JSONEncoder.challenge.encode(pending) {
+            defaults.set(data, forKey: Self.pendingKey)
+        }
+    }
+
+    /// Sends rounds that were played offline. Runs before each lobby load.
+    private func sendPendingTurns() async {
+        for (matchID, turn) in pending where !busy.contains(matchID) {
+            _ = try? await send(turn, matchID: matchID, fallback: nil)
+        }
+    }
+
+    /// Passes the turn to whoever still has to play, or ends the match when
+    /// nobody does. We go last in the turn order so that, if the friend
+    /// doesn't play in time, Game Center hands the match back to us and we
+    /// can close it, instead of it hanging forever.
+    private func passOrFinish(_ match: GKTurnBasedMatch, data: ChallengeData, message: String? = nil) async throws {
+        let me = localPlayerID
+        let waiting = match.participants.filter { p in
+            guard p.player?.gamePlayerID != me, p.matchOutcome == .none,
+                  p.status != .declined, p.status != .done else { return false }
+            return p.player.map { !data.hasPlayed($0.gamePlayerID) } ?? true
+        }
+        if waiting.isEmpty {
+            try await finish(match, data: data)
+        } else {
+            let mine = match.participants.filter { $0.player?.gamePlayerID == me }
+            match.message = message ?? "\(localPlayerName) is waiting on you. Your turn!"
+            try await match.endTurn(withNextParticipants: waiting + mine,
+                                    turnTimeout: Self.turnTimeout,
+                                    match: data.encoded())
+        }
+        cache[match.matchID] = nil
+    }
+
+    /// Sets everyone's outcome from the scores and ends the match. Anyone
+    /// who never played (declined, quit, timed out) doesn't win.
+    private func finish(_ match: GKTurnBasedMatch, data: ChallengeData) async throws {
+        let ids = match.participants.compactMap { $0.player?.gamePlayerID }
+        let results = data.finalResults(for: ids)
+        for p in match.participants where p.matchOutcome == .none {
             guard let id = p.player?.gamePlayerID else { p.matchOutcome = .quit; continue }
-            switch data.outcome(for: id, among: ids) {
+            switch results[id] ?? .didNotPlay {
             case .won: p.matchOutcome = .won
             case .lost: p.matchOutcome = .lost
             case .tied: p.matchOutcome = .tied
-            // Nobody left to play against: everyone else quit.
-            case nil: p.matchOutcome = ids.count == 1 ? .won : .quit
+            case .didNotPlay: p.matchOutcome = p.status == .declined ? .quit : .timeExpired
             }
         }
         match.message = "Challenge finished. See who won!"
         try await match.endMatchInTurn(withMatch: data.encoded())
-        return await item(for: match, data: data)
     }
 
     /// Leaves a round partway: whatever was answered counts, the rest are
@@ -291,14 +412,14 @@ final class GameCenter: NSObject {
     /// Starts a new match with the same friend and opens it.
     func rematch(_ matchID: String) async {
         if isDemo { return rematchDemo(matchID) }
-        guard let match = matches[matchID] else { return }
         do {
-            let next = try await match.rematch()
+            let old = try await GKTurnBasedMatch.load(withID: matchID)
+            let next = try await old.rematch()
             matches[next.matchID] = next
             try await show(next)
             await refresh()
         } catch {
-            errorMessage = "Couldn't start a rematch. \(error.localizedDescription)"
+            errorMessage = Self.friendly(error, doing: "start a rematch")
         }
     }
 
@@ -309,29 +430,40 @@ final class GameCenter: NSObject {
             challenges.removeAll { $0.id == item.id }
             return
         }
-        guard let match = matches[item.id] else { return }
+        busy.insert(item.id)
+        defer { busy.remove(item.id) }
         do {
-            switch item.status {
-            case .invited:
-                try await match.declineInvite()
-            case .yourTurn, .needsUpdate:
-                let others = match.participants.filter {
-                    $0.player?.gamePlayerID != localPlayerID && $0.matchOutcome != .quit
+            let match = try await GKTurnBasedMatch.load(withID: item.id)
+            let me = localPlayerID
+            let myTurn = match.currentParticipant?.player?.gamePlayerID == me
+            if match.status != .ended {
+                if match.participants.first(where: { $0.player?.gamePlayerID == me })?.status == .invited {
+                    try await match.declineInvite()
+                } else if myTurn {
+                    let data = await challengeData(of: match, useCache: false)
+                    let others = match.participants.filter {
+                        $0.player?.gamePlayerID != me && $0.matchOutcome == .none
+                    }
+                    if let data, data.hasPlayed(me) || others.isEmpty {
+                        // Already played (or nobody left): just close it out.
+                        try await finish(match, data: data)
+                    } else {
+                        try await match.participantQuitInTurn(
+                            with: .quit, nextParticipants: others, turnTimeout: Self.turnTimeout,
+                            match: match.matchData ?? Data())
+                    }
+                } else {
+                    try await match.participantQuitOutOfTurn(with: .quit)
                 }
-                let data = try await match.loadMatchData() ?? Data()
-                try await match.participantQuitInTurn(with: .quit, nextParticipants: others,
-                                                      turnTimeout: GKTurnTimeoutDefault, match: data)
-            case .theirTurn, .findingOpponent, .declined:
-                try await match.participantQuitOutOfTurn(with: .quit)
-            case .finished:
-                break
             }
-            if match.status == .ended || item.isFinished {
-                try await match.remove()
+            if item.isFinished || item.status == .declined || match.status == .ended {
+                try? await match.remove()
             }
+            challenges.removeAll { $0.id == item.id && (item.isFinished || item.status == .declined) }
+            cache[item.id] = nil
             await refresh()
         } catch {
-            errorMessage = "Couldn't remove that challenge. \(error.localizedDescription)"
+            errorMessage = Self.friendly(error, doing: "remove that challenge")
         }
     }
 
@@ -355,11 +487,48 @@ final class GameCenter: NSObject {
 
     // MARK: Helpers
 
-    /// nil for a match nobody has dealt yet (or data we can't read).
-    private static func challengeData(of match: GKTurnBasedMatch) async -> ChallengeData? {
-        guard let data = try? await match.loadMatchData(), !data.isEmpty else { return nil }
-        return try? ChallengeData(matchData: data)
+    /// nil for a match nobody has dealt yet (or data we can't read). A
+    /// finished match never changes and a waiting one only changes when
+    /// someone takes a turn, so the lobby reuses what it loaded before
+    /// unless the match has moved on.
+    private func challengeData(of match: GKTurnBasedMatch, useCache: Bool = true) async -> ChallengeData? {
+        let stamp = Self.stamp(of: match)
+        if useCache, let hit = cache[match.matchID], hit.stamp == stamp { return hit.data }
+        guard let raw = try? await match.loadMatchData() else { return nil }
+        let data = raw.isEmpty ? nil : try? ChallengeData(matchData: raw)
+        cache[match.matchID] = (stamp, data)
+        return data
     }
+
+    private static func stamp(of match: GKTurnBasedMatch) -> String {
+        let last = match.participants.compactMap(\.lastTurnDate).max()?.timeIntervalSince1970 ?? 0
+        return "\(match.status.rawValue)|\(match.currentParticipant?.player?.gamePlayerID ?? "-")|\(last)"
+    }
+
+    /// Plain-language error text for the common Game Center failures.
+    static func friendly(_ error: any Error, doing action: String) -> String {
+        if let challenge = error as? ChallengeError { return challenge.errorDescription ?? "" }
+        let code = (error as? GKError)?.code
+        switch code {
+        case .notAuthenticated:
+            return "Couldn't \(action). Sign in to Game Center in Settings and try again."
+        case .communicationsFailure, .connectionTimeout, .unknown:
+            return "Couldn't \(action). Check your connection and try again."
+        case .invalidParameter, .turnBasedInvalidTurn, .turnBasedInvalidState, .turnBasedInvalidParticipant:
+            return "Couldn't \(action). It changed on another device. Pull down to refresh."
+        case .gameUnrecognized, .notSupported:
+            return "Game Center isn't set up for Quizio yet. Please try again later."
+        default:
+            if let url = error as? URLError, url.code == .notConnectedToInternet {
+                return "Couldn't \(action). You're offline."
+            }
+            return "Couldn't \(action). \(error.localizedDescription)"
+        }
+    }
+
+    /// Two days per turn: long enough to play at your own pace, short
+    /// enough that a forgotten challenge comes back and gets closed out.
+    private static let turnTimeout: TimeInterval = 2 * 24 * 60 * 60
 
     private func addToRivalries(_ outcome: ChallengeOutcome, matchID: String,
                                 opponentID: String, name: String, playedAt: Date) {
@@ -422,28 +591,46 @@ final class GameCenter: NSObject {
 
 enum ChallengeError: LocalizedError {
     case matchMissing
-    var errorDescription: String? { "That challenge isn't available any more." }
+    case notYourTurn
+    var errorDescription: String? {
+        switch self {
+        case .matchMissing: "That challenge isn't available any more."
+        case .notYourTurn: "This challenge moved on without you, so your score couldn't be sent. Pull down in Friends to see where it stands."
+        }
+    }
 }
 
 // MARK: Game Center events
 
 extension GameCenter: GKLocalPlayerListener {
     nonisolated func player(_ player: GKPlayer, receivedTurnEventFor match: GKTurnBasedMatch, didBecomeActive: Bool) {
-        let matchID = match.matchID
+        nonisolated(unsafe) let match = match
         Task { @MainActor in
-            await self.refresh()
+            // Keep the copy Game Center just gave us: a brand-new match may
+            // not show up in loadMatches for a moment.
+            self.matches[match.matchID] = match
+            self.cache[match.matchID] = nil
             // didBecomeActive: the player tapped a notification, or just
             // picked a friend in the matchmaker. Take them straight there.
-            guard didBecomeActive, let match = self.matches[matchID],
-                  match.currentParticipant?.player?.gamePlayerID == self.localPlayerID else { return }
-            self.dismissPresented {
-                Task { try? await self.show(match) }
+            if didBecomeActive {
+                self.dismissPresented {
+                    Task {
+                        do { try await self.presentMatch(match) } catch {
+                            self.errorMessage = Self.friendly(error, doing: "open that challenge")
+                        }
+                    }
+                }
             }
+            await self.refresh()
         }
     }
 
     nonisolated func player(_ player: GKPlayer, matchEnded match: GKTurnBasedMatch) {
-        Task { @MainActor in await self.refresh() }
+        let matchID = match.matchID
+        Task { @MainActor in
+            self.cache[matchID] = nil
+            await self.refresh()
+        }
     }
 
     /// Quit from Game Center's own UI while it's our turn.

@@ -38,6 +38,11 @@ public enum ChallengeOutcome: String, Codable, Sendable {
     case won, lost, tied
 }
 
+/// A player's result when a match is closed out.
+public enum ChallengeFinalResult: Equatable, Sendable {
+    case won, lost, tied, didNotPlay
+}
+
 /// Everything a "challenge a friend" match needs, stored in the Game Center
 /// turn-based match data so both phones play exactly the same round.
 ///
@@ -124,12 +129,43 @@ public struct ChallengeData: Codable, Equatable, Sendable {
         return .tied
     }
 
+    /// Everyone's final result when a match closes, which can be before
+    /// everyone has played (a friend declined, quit, or ran out of time).
+    /// Players with a turn are ranked against each other; if only one
+    /// played, they win. Players without a turn get `.didNotPlay`.
+    public func finalResults(for playerIDs: [String]) -> [String: ChallengeFinalResult] {
+        let played = playerIDs.filter(hasPlayed)
+        var results: [String: ChallengeFinalResult] = [:]
+        for id in playerIDs {
+            if !hasPlayed(id) {
+                results[id] = .didNotPlay
+            } else if played.count == 1 {
+                results[id] = .won
+            } else {
+                switch outcome(for: id, among: played) {
+                case .won: results[id] = .won
+                case .lost: results[id] = .lost
+                case .tied, nil: results[id] = .tied
+                }
+            }
+        }
+        return results
+    }
+
+    /// Whether a finished match belongs in the head-to-head record: only
+    /// when both players actually played it. A declined or expired
+    /// challenge isn't a real game, so it shouldn't count as anyone's win
+    /// or loss.
+    public func isContested(between a: String, and b: String) -> Bool {
+        hasPlayed(a) && hasPlayed(b)
+    }
+
     /// Points first, then correct answers.
     private static func rank(_ turn: ChallengeTurn) -> (Int, Int) { (turn.points, turn.correctCount) }
 }
 
 extension JSONEncoder {
-    static let challenge: JSONEncoder = {
+    public static let challenge: JSONEncoder = {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .secondsSince1970
         return e
@@ -137,7 +173,7 @@ extension JSONEncoder {
 }
 
 extension JSONDecoder {
-    static let challenge: JSONDecoder = {
+    public static let challenge: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .secondsSince1970
         return d

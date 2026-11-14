@@ -57,6 +57,34 @@ private func turn(_ id: String, points: Int, correct: Int = 5) -> ChallengeTurn 
         #expect(d.turn(for: "me")?.points == 500)
     }
 
+    @Test func finalResultsRankThoseWhoPlayed() {
+        var d = data
+        d.record(turn("a", points: 900))
+        d.record(turn("b", points: 700))
+        let r = d.finalResults(for: ["a", "b"])
+        #expect(r["a"] == .won)
+        #expect(r["b"] == .lost)
+        #expect(d.isContested(between: "a", and: "b"))
+    }
+
+    @Test func finalResultsWhenFriendNeverPlayed() {
+        // Declined or timed out: the challenger wins the match, but it
+        // isn't contested, so it stays out of head-to-head records.
+        var d = data
+        d.record(turn("a", points: 400))
+        let r = d.finalResults(for: ["a", "b"])
+        #expect(r["a"] == .won)
+        #expect(r["b"] == .didNotPlay)
+        #expect(!d.isContested(between: "a", and: "b"))
+    }
+
+    @Test func finalResultsTieOnEqualScores() {
+        var d = data
+        d.record(turn("a", points: 500, correct: 5))
+        d.record(turn("b", points: 500, correct: 5))
+        #expect(d.finalResults(for: ["a", "b"]) == ["a": .tied, "b": .tied])
+    }
+
     @Test func scoreToBeatIgnoresYourOwnTurn() {
         var d = data
         #expect(d.scoreToBeat(for: "friend") == nil)
