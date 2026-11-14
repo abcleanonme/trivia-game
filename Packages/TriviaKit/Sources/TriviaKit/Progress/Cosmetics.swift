@@ -3,10 +3,13 @@ import Foundation
 /// Cosmetics change how things look, never how the game plays. They're
 /// earned with Sparks or by playing, never with money.
 public enum CosmeticSlot: String, CaseIterable, Codable, Sendable, CodingKeyRepresentable {
+    /// The whole app's look: paper, cards, accent and animated background.
+    case theme
     case avatar, border, cardShape, cardBackground, emblem
 
     public var title: String {
         switch self {
+        case .theme: "App theme"
         case .avatar: "Avatar"
         case .border: "Border"
         case .cardShape: "Card shape"
@@ -28,6 +31,8 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
 
     public enum Pattern: String, Sendable { case solid, stripes, dots, grid }
     public enum Shape: String, Sendable { case rounded, ticket, hexagon, ribbon }
+    /// The ambient animation behind screens for an app theme.
+    public enum Motion: String, CaseIterable, Sendable { case drift, bubbles, waves, stars, confetti, grid }
 
     public let id: String
     public let slot: CosmeticSlot
@@ -41,6 +46,8 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
     public var shape: Shape? = nil
     /// Border drawn dashed.
     public var dashed = false
+    /// App themes only: the animated background.
+    public var motion: Motion? = nil
 
     public var price: Int? {
         if case .sparks(let n) = unlock { n } else { nil }
@@ -48,18 +55,36 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
 }
 
 public enum CosmeticCatalog {
-    public static let all: [Cosmetic] = avatars + borders + shapes + backgrounds + emblems
+    public static let all: [Cosmetic] = themes + avatars + borders + shapes + backgrounds + emblems
 
     public static func item(_ id: String) -> Cosmetic? { byID[id] }
     public static func items(in slot: CosmeticSlot) -> [Cosmetic] { all.filter { $0.slot == slot } }
 
     /// Equipped when nothing else is.
     public static let defaults: [CosmeticSlot: String] = [
-        .avatar: "avatar.monogram", .border: "border.ink", .cardShape: "shape.rounded",
+        .theme: "theme.classic", .avatar: "avatar.monogram", .border: "border.ink", .cardShape: "shape.rounded",
         .cardBackground: "bg.paper", .emblem: "emblem.none",
     ]
 
     private static let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+
+    /// App themes. Colors are a swatch (paper, accent); the full palette
+    /// lives with the app's design code. Prices follow the design spec
+    /// (300–600 Sparks). Correct/wrong colors never change with a theme.
+    static let themes: [Cosmetic] = [
+        Cosmetic(id: "theme.classic", slot: .theme, name: "Classic", unlock: .starter,
+                 colors: [0xF7F6F2, 0x3B5BFD], motion: .drift),
+        Cosmetic(id: "theme.mint", slot: .theme, name: "Mint Fizz", unlock: .sparks(300),
+                 colors: [0xE6F7EF, 0x0E7A54], motion: .bubbles),
+        Cosmetic(id: "theme.sunset", slot: .theme, name: "Sunset", unlock: .sparks(400),
+                 colors: [0xFFF0E4, 0xB83280], motion: .waves),
+        Cosmetic(id: "theme.confetti", slot: .theme, name: "Confetti", unlock: .sparks(450),
+                 colors: [0xFFF8EC, 0x7C3AED], motion: .confetti),
+        Cosmetic(id: "theme.midnight", slot: .theme, name: "Midnight", unlock: .sparks(500),
+                 colors: [0x0E1030, 0x4F5BE8], motion: .stars),
+        Cosmetic(id: "theme.neon", slot: .theme, name: "Neon Arcade", unlock: .sparks(600),
+                 colors: [0x120A1F, 0xC2247A], motion: .grid),
+    ]
 
     static let avatars: [Cosmetic] = [
         Cosmetic(id: "avatar.monogram", slot: .avatar, name: "Monogram", unlock: .starter, colors: [0x3B5BFD]),
@@ -131,7 +156,11 @@ public struct Inventory: Codable, Equatable, Sendable {
         equipped = CosmeticCatalog.defaults
     }
 
-    public func owns(_ id: String) -> Bool { owned.contains(id) }
+    /// Starter items count as owned even in inventories saved before they
+    /// were added to the catalog.
+    public func owns(_ id: String) -> Bool {
+        owned.contains(id) || CosmeticCatalog.item(id)?.unlock == .starter
+    }
 
     public func equipped(_ slot: CosmeticSlot) -> Cosmetic {
         CosmeticCatalog.item(equipped[slot] ?? "") ?? CosmeticCatalog.item(CosmeticCatalog.defaults[slot]!)!

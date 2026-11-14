@@ -110,7 +110,7 @@ struct SummaryView: View {
             .frame(maxWidth: .infinity)
             .background(Theme.paper)
         }
-        .background(Theme.paper)
+        .themeBackground()
     }
 
     private var headline: String {

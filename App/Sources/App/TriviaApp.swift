@@ -9,6 +9,8 @@ struct TriviaApp: App {
             RootView()
                 .environment(store)
                 .tint(Theme.accent)
+                // Dark themes (Midnight, Neon Arcade) force dark mode.
+                .preferredColorScheme(ThemeManager.shared.palette.scheme)
         }
     }
 }

@@ -28,7 +28,7 @@ struct HomeView: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
-        .background(Theme.paper)
+        .themeBackground()
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $round) { request in
             GameView(request: request, relaxed: relaxedMode)

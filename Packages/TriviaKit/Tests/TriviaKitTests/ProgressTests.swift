@@ -255,6 +255,37 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         }
     }
 
+    @Test func themesArePricedAndAnimated() {
+        let themes = CosmeticCatalog.items(in: .theme)
+        #expect(themes.count >= 5)
+        #expect(themes.allSatisfy { $0.motion != nil })
+        for theme in themes where theme.unlock != .starter {
+            #expect((300...600).contains(theme.price ?? 0))
+        }
+    }
+
+    @Test func buyingAThemeEquipsIt() {
+        var wallet = Wallet(sparks: 350)
+        var inv = Inventory()
+        #expect(inv.equipped(.theme).id == "theme.classic")
+        #expect(!inv.buy("theme.sunset", with: &wallet)) // 400, too pricey
+        #expect(inv.buy("theme.mint", with: &wallet))
+        #expect(wallet.sparks == 50)
+        inv.equip("theme.mint")
+        #expect(inv.equipped(.theme).id == "theme.mint")
+        inv.equip("theme.neon") // not owned
+        #expect(inv.equipped(.theme).id == "theme.mint")
+    }
+
+    @Test func inventorySavedBeforeThemesStillWorks() throws {
+        // An inventory saved by a build that had no theme slot.
+        let json = #"{"owned":["avatar.monogram","border.ink"],"equipped":{"avatar":"avatar.monogram"}}"#
+        let inv = try JSONDecoder().decode(Inventory.self, from: Data(json.utf8))
+        #expect(inv.equipped(.theme).id == "theme.classic")
+        #expect(inv.owns("theme.classic"))
+        #expect(!inv.owns("theme.mint"))
+    }
+
     @Test func buyingSpendsSparksOnce() {
         var wallet = Wallet(sparks: 120)
         var inv = Inventory()
