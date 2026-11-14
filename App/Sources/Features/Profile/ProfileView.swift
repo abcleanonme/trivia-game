@@ -10,6 +10,12 @@ struct ProfileView: View {
         let p = store.progress
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
+                // Same compact header as Home and Friends.
+                Text("Profile")
+                    .font(Theme.display(.title))
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, -Space.s)
                 VStack(spacing: Space.m) {
                     PlayerCardView(look: CardLook(store: store))
                     HStack(spacing: Space.s) {
@@ -41,7 +47,7 @@ struct ProfileView: View {
                 section("Records") {
                     statGrid([
                         ("Rounds", "\(p.stats.roundsPlayed)", "list.number"),
-                        ("Best streak", "\(p.stats.bestStreak)", "flame"),
+                        ("Top run", "\(p.stats.bestStreak)", "flame"),
                         ("Survival", "\(p.stats.bestSurvival)", GameMode.survival.systemImage),
                         ("Speed", "\(p.stats.bestSpeedRound)", GameMode.speed.systemImage),
                     ])
@@ -54,7 +60,8 @@ struct ProfileView: View {
                         ForEach(Array(store.bank.categories.enumerated()), id: \.element) { i, category in
                             if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
                             MasteryRow(category: category)
-                                .padding(.vertical, Space.m)
+                                .padding(.top, Space.s)
+            .padding(.bottom, Space.m)
                         }
                     }
                     .padding(.horizontal, Theme.cardPadding)
@@ -105,12 +112,14 @@ struct ProfileView: View {
                 }
             }
             .padding(.horizontal, Theme.gutter)
-            .padding(.vertical, Space.m)
+            .padding(.top, Space.s)
+            .padding(.bottom, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
         .background(Theme.paper)
         .navigationTitle("Profile")
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

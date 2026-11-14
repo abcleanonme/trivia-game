@@ -68,6 +68,7 @@ struct ShopView: View {
         }
         .background(Theme.paper)
         .navigationTitle("Style shop")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder private func action(for item: Cosmetic) -> some View {

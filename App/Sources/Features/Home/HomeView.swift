@@ -26,7 +26,7 @@ struct HomeView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.s)
-            .padding(.bottom, Space.m)
+            .padding(.bottom, Space.xl)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
@@ -98,6 +98,9 @@ struct HomeView: View {
                         .font(.footnote.weight(.semibold))
                 }
                 .tint(Theme.spark)
+                // The off track is hard to see on the blue card in dark
+                // mode; the light variant reads well on blue in both.
+                .environment(\.colorScheme, .light)
                 .disabled(!mode.supportsRelaxed)
                 .opacity(mode.supportsRelaxed ? 1 : 0.6)
             }
@@ -223,7 +226,7 @@ private struct OptionRow<Option: Hashable>: View {
     var body: some View {
         let layout = typeSize > .xxLarge
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.xs))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: Space.s))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Space.s))
         layout {
             Text(label)
                 .eyebrow()
@@ -289,10 +292,12 @@ struct SectionLabel: View {
 
 struct SparksPill: View {
     let amount: Int
+    /// The bolt grows with Dynamic Type alongside the number.
+    @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 16
 
     var body: some View {
         HStack(spacing: 6) {
-            SparkIcon()
+            SparkIcon(size: iconSize)
             Text("\(amount) Sparks").font(.subheadline.bold())
         }
         .foregroundStyle(Theme.ink)
