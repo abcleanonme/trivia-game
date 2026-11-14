@@ -93,6 +93,10 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         case .dailiesPlayed: "\(stats.dailiesPlayed)"
         case .wins: "\(rivals.totalWins)"
         case .topCategory: topCategory ?? "None yet"
+        case .roundsPlayed: "\(stats.roundsPlayed)"
+        case .bestSurvival: "\(stats.bestSurvival)"
+        case .stampCount: "\(stamps.count)"
+        case .hidden: ""
         }
     }
 
@@ -232,6 +236,10 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         inventory = try c.decodeIfPresent(Inventory.self, forKey: .inventory) ?? Inventory()
         card = try c.decodeIfPresent(PlayerCard.self, forKey: .card) ?? PlayerCard()
         stamps = try c.decodeIfPresent(Set<Stamp>.self, forKey: .stamps) ?? []
+        // Stamp rewards added to the catalog after the stamp was earned.
+        for item in CosmeticCatalog.all {
+            if case .stamp(let stamp) = item.unlock, stamps.contains(stamp) { inventory.grant(item.id) }
+        }
     }
 
     public func encode(to encoder: any Encoder) throws {
