@@ -193,6 +193,15 @@ final class PlayerStore {
         return true
     }
 
+    /// Buys power-ups from the shop. Returns false if the player can't
+    /// afford the offer or it would go over the stock limit.
+    @discardableResult
+    func buy(_ offer: PowerUpOffer) -> Bool {
+        guard wallet.buy(offer) else { return false }
+        save()
+        return true
+    }
+
     func award(sparks: Int) {
         wallet.earn(sparks: sparks)
         save()
