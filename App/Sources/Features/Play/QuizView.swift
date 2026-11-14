@@ -80,7 +80,7 @@ struct QuizView: View {
                             bottomBar.id(Self.bottomBarID)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.gutter)
                     .padding(.top, 8)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 760)
@@ -102,7 +102,7 @@ struct QuizView: View {
             .safeAreaInset(edge: .bottom) {
                 if !inlineBottomBar {
                     bottomBar
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, Theme.gutter)
                         .padding(.top, 8)
                         .padding(.bottom, 10)
                         .frame(maxWidth: 760)
@@ -621,8 +621,8 @@ private struct FeedbackBar: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(16)
-        .card(fill: result.correct ? Theme.correct : Theme.wrong, radius: 22)
+        .padding(Theme.cardPadding)
+        .card(fill: result.correct ? Theme.correct : Theme.wrong, radius: Theme.cardRadius)
         .accessibilityElement(children: .contain)
         .onAppear {
             withAnimation(Motion.choose(Motion.pop, reduce: reduceMotion).delay(0.12)) { landed = true }
@@ -637,7 +637,7 @@ private struct FeedbackBar: View {
         Button(action: onNext) {
             Text(isLast ? "Results" : "Next")
                 .font(.headline)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, Theme.gutter)
                 .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 44)
         }
         .buttonStyle(.chunky(fill: Theme.card, capsule: true))

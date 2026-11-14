@@ -9,18 +9,18 @@ struct ProfileView: View {
     var body: some View {
         let p = store.progress
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: Space.xl) {
+                VStack(spacing: Space.m) {
                     PlayerCardView(look: CardLook(store: store))
-                    FlowLayout(spacing: 10) {
+                    HStack(spacing: Space.s) {
                         NavigationLink { CardEditorView() } label: {
                             Label("Edit card", systemImage: "pencil")
-                                .font(.headline).padding(.horizontal, 18).frame(minHeight: 44)
+                                .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.chunky(fill: Theme.card, capsule: true))
                         NavigationLink { ShopView() } label: {
                             Label("Style shop", systemImage: "paintpalette.fill")
-                                .font(.headline).padding(.horizontal, 18).frame(minHeight: 44)
+                                .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
                     }
@@ -48,9 +48,17 @@ struct ProfileView: View {
                 }
 
                 section("Category mastery") {
-                    VStack(spacing: 14) {
-                        ForEach(store.bank.categories, id: \.self) { MasteryRow(category: $0) }
+                    // One card with hairlines between rows reads as a list
+                    // instead of fourteen loose blocks.
+                    VStack(spacing: 0) {
+                        ForEach(Array(store.bank.categories.enumerated()), id: \.element) { i, category in
+                            if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
+                            MasteryRow(category: category)
+                                .padding(.vertical, Space.m)
+                        }
                     }
+                    .padding(.horizontal, Theme.cardPadding)
+                    .card()
                 }
 
                 section("Stamps") {
@@ -79,18 +87,25 @@ struct ProfileView: View {
                             .font(.subheadline)
                             .foregroundStyle(Theme.muted)
                     } else {
-                        ForEach(p.rivals.sorted) { r in
-                            HStack {
-                                Text(r.name).font(.headline)
-                                Spacer()
-                                RivalryBadge(record: r)
+                        VStack(spacing: 0) {
+                            ForEach(Array(p.rivals.sorted.enumerated()), id: \.element.id) { i, r in
+                                if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
+                                HStack {
+                                    Text(r.name).font(.headline).foregroundStyle(Theme.ink)
+                                    Spacer()
+                                    RivalryBadge(record: r)
+                                }
+                                .frame(minHeight: 44)
+                                .padding(.vertical, Space.xs)
                             }
                         }
+                        .padding(.horizontal, Theme.cardPadding)
+                        .card()
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.vertical, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
@@ -99,27 +114,14 @@ struct ProfileView: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(title).accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: Space.s) {
+            SectionLabel(title)
             content()
         }
     }
 
     private func statGrid(_ items: [(String, String, String)]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
-            ForEach(items, id: \.0) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(item.0, systemImage: item.2)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.muted)
-                    Text(item.1).font(Theme.display(.title2)).foregroundStyle(Theme.ink)
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .card(radius: 18)
-                .accessibilityElement(children: .combine)
-            }
-        }
+        StatStrip(items: items.map { StatStrip.Item(label: $0.0, value: $0.1, systemImage: $0.2) })
     }
 }
 
@@ -131,8 +133,8 @@ struct MasteryRow: View {
         let correct = store.progress.masteryCorrect[category, default: 0]
         let level = Mastery.level(forCorrect: correct)
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(category).font(.headline).foregroundStyle(Theme.ink)
+            HStack(spacing: Space.xs) {
+                Text(category).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
                 ForEach(Mastery.badgeLevels.sorted(), id: \.self) { badge in
                     if level >= badge {
                         Image(systemName: badge >= 10 ? "rosette" : "medal.fill")
@@ -142,7 +144,7 @@ struct MasteryRow: View {
                 }
                 Spacer()
                 Text(level == 0 ? "Not ranked" : "Level \(level)")
-                    .font(.subheadline.bold())
+                    .font(.footnote.bold())
                     .foregroundStyle(level == 0 ? Theme.muted : Theme.ink)
             }
             GeometryReader { geo in
@@ -151,7 +153,7 @@ struct MasteryRow: View {
                     Capsule().fill(Theme.accent).frame(width: geo.size.width * Mastery.progress(forCorrect: correct))
                 }
             }
-            .frame(height: 8)
+            .frame(height: 6)
             Text(level >= Mastery.maxLevel
                  ? "\(correct.formatted()) correct · mastered"
                  : "\(correct.formatted()) correct · \(Mastery.remaining(forCorrect: correct)) to level \(level + 1)")

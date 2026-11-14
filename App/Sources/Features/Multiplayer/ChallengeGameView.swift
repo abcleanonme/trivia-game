@@ -147,15 +147,17 @@ private struct ChallengeIntroView: View {
     let onStart: () -> Void
     let onLater: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 22) {
-                VStack(spacing: 10) {
+            VStack(spacing: Space.l) {
+                VStack(spacing: Space.s) {
                     SectionLabel("Challenge")
                     HStack(spacing: 14) {
-                        PlayerBadge(name: "You", size: 64)
+                        PlayerBadge(name: "You", size: 56)
                         Text("vs").font(Theme.display(.title2)).foregroundStyle(Theme.muted)
-                        PlayerBadge(name: round.opponentName, size: 64)
+                        PlayerBadge(name: round.opponentName, size: 56)
                     }
                     .accessibilityHidden(true)
                     Text("You vs \(round.opponentName)")
@@ -172,42 +174,48 @@ private struct ChallengeIntroView: View {
                     }
                     .foregroundStyle(Theme.onSpark)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
+                    .padding(.vertical, Space.l)
                     .card(fill: Theme.spark, drop: 5)
                     .accessibilityElement(children: .combine)
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Space.m) {
                     rule("list.number", "\(round.data.questions.count) questions, the same ones \(round.opponentName) gets")
                     rule("timer", "\(Int(GameRules.questionTime)) seconds each. Answer fast for bonus points")
                     rule("bolt.fill", "Up to \(round.data.powerUpLimit) power-ups from your own stock")
                     rule("trophy", "Highest score wins. Ties go to more correct answers")
                 }
-                .font(.body)
+                .font(.subheadline)
                 .foregroundStyle(Theme.ink)
-                .padding(20)
+                .padding(Theme.cardPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .card()
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 40)
-            .padding(.bottom, 16)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, Space.xl)
+            .padding(.bottom, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                Button(action: onStart) {
-                    Text("Start round").font(.title3.bold()).frame(maxWidth: .infinity, minHeight: 56)
-                }
-                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+            // Same footer as the round summary: small secondary, big primary.
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 10))
+                : AnyLayout(HStackLayout(spacing: 10))) {
                 Button(action: onLater) {
-                    Text("Not now").font(.headline).frame(maxWidth: .infinity, minHeight: 52)
+                    Text("Not now").font(.headline)
+                        .padding(.horizontal, 18)
+                        .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil, minHeight: 52)
                 }
                 .buttonStyle(.chunky(fill: Theme.card, capsule: true))
+                Button(action: onStart) {
+                    Label("Start round", systemImage: "play.fill")
+                        .font(.title3.bold()).frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Theme.gutter)
             .padding(.vertical, 12)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
@@ -269,7 +277,7 @@ private struct ChallengeResultView: View {
                     Rectangle().fill(Theme.line).frame(height: 2)
                     scoreRow(name: round.opponentName, turn: theirs, highlight: outcome == .lost)
                 }
-                .padding(20)
+                .padding(Theme.cardPadding)
                 .card()
 
                 if let mine {
@@ -284,15 +292,15 @@ private struct ChallengeResultView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .foregroundStyle(Theme.onSpark)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.gutter)
                     .padding(.vertical, 16)
                     .card(fill: Theme.spark, drop: 5)
                     .accessibilityElement(children: .combine)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 40)
-            .padding(.bottom, 16)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, Space.xl)
+            .padding(.bottom, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
@@ -311,7 +319,7 @@ private struct ChallengeResultView: View {
                 }
                 .buttonStyle(.chunky(fill: Theme.card, capsule: true))
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Theme.gutter)
             .padding(.vertical, 12)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)

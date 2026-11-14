@@ -10,9 +10,9 @@ struct FriendsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 Text("Friends")
-                    .font(Theme.display(.largeTitle))
+                    .font(Theme.display(.title))
                     .foregroundStyle(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
 
@@ -32,8 +32,9 @@ struct FriendsView: View {
                     lobby
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, Space.s)
+            .padding(.bottom, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
@@ -53,31 +54,38 @@ struct FriendsView: View {
     // MARK: Cards
 
     private var challengeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Take turns")
-                .font(.footnote.weight(.semibold))
-                .textCase(.uppercase)
-                .kerning(1)
-                .opacity(0.9)
-            Text("Challenge\na friend.")
-                .font(Theme.display(.largeTitle))
-            Text("You play 10 questions, then they play the same 10 whenever they like. Highest score wins.")
-                .font(.subheadline)
-                .opacity(0.92)
-                .fixedSize(horizontal: false, vertical: true)
+        // Same shape as Home's mode card: text with the action beside it,
+        // stacking at accessibility sizes.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Space.m))
+        return layout {
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text("Take turns")
+                    .eyebrow()
+                    .opacity(0.9)
+                Text("Challenge a friend.")
+                    .font(Theme.display(.title2))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("You play 10, they play the same 10 when they like. Highest score wins.")
+                    .font(.footnote)
+                    .opacity(0.92)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button { gameCenter.newChallenge() } label: {
-                Label("New challenge", systemImage: "plus")
+                Label("New", systemImage: "plus")
                     .font(.title3.bold())
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, Space.l)
+                    .frame(minHeight: 52)
             }
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
-            .padding(.top, 4)
+            .accessibilityLabel("New challenge")
         }
         .foregroundStyle(.white)
-        .padding(24)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card(fill: Theme.accent, radius: 28, drop: 6)
+        .card(fill: Theme.accent, radius: Theme.cardRadius, drop: 5)
     }
 
     private var signInCard: some View {
@@ -99,9 +107,9 @@ struct FriendsView: View {
             .padding(.top, 4)
         }
         .foregroundStyle(Theme.ink)
-        .padding(22)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card()
+        .card(drop: 4)
     }
 
     private func loadErrorBanner(_ message: String) -> some View {
@@ -118,8 +126,8 @@ struct FriendsView: View {
                 .font(.subheadline.bold())
         }
         .foregroundStyle(Theme.ink)
-        .padding(16)
-        .card(radius: 20)
+        .padding(Theme.cardPadding)
+        .card()
     }
 
     private func notice(_ title: String, _ message: String) -> some View {
@@ -128,7 +136,7 @@ struct FriendsView: View {
             Text(message).font(.subheadline).foregroundStyle(Theme.muted)
         }
         .foregroundStyle(Theme.ink)
-        .padding(20)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
     }
@@ -159,7 +167,7 @@ struct FriendsView: View {
     @ViewBuilder
     private func section(_ title: String, _ items: [ChallengeItem]) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 SectionLabel(title)
                 ForEach(items) { item in
                     ChallengeRow(item: item,
@@ -172,7 +180,7 @@ struct FriendsView: View {
     @ViewBuilder private var rivals: some View {
         let rivals = gameCenter.rivalries.rivals
         if !rivals.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 SectionLabel("Head to head")
                 VStack(spacing: 0) {
                     ForEach(Array(rivals.enumerated()), id: \.element.id) { i, rival in
@@ -188,8 +196,8 @@ struct FriendsView: View {
                     }
                 }
                 .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
+                .padding(.horizontal, Theme.cardPadding)
+                .padding(.vertical, Space.xs)
                 .card()
             }
         }
@@ -223,9 +231,10 @@ private struct ChallengeRow: View {
             action
         }
         .foregroundStyle(Theme.ink)
-        .padding(14)
+        .padding(.horizontal, Space.m)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card(radius: 20)
+        .card()
         .contextMenu {
             Button(removeTitle, systemImage: "xmark.circle", role: .destructive) { confirmingRemove = true }
         }
@@ -288,7 +297,7 @@ private struct ChallengeRow: View {
         switch item.status {
         case .invited, .yourTurn:
             Button { Task { await gameCenter.open(item) } } label: {
-                Text("Play").font(.headline).lineLimit(1).padding(.horizontal, 20).frame(minHeight: 44)
+                Text("Play").font(.headline).lineLimit(1).padding(.horizontal, Space.l).frame(minHeight: 44)
             }
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
             .fixedSize()

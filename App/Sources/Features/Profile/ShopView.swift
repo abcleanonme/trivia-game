@@ -11,7 +11,7 @@ struct ShopView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 HStack {
                     SectionLabel(previewing == nil ? "Your card" : "Preview")
                     Spacer()
@@ -20,13 +20,32 @@ struct ShopView: View {
                 PlayerCardView(look: CardLook(store: store, previewing: previewing))
                     .animation(.default, value: previewing?.id)
 
-                Picker("Slot", selection: $slot) {
-                    ForEach(CosmeticSlot.allCases, id: \.self) { Text($0.title).tag($0) }
+                // Every slot visible at once as chips, instead of hidden
+                // behind a menu.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(CosmeticSlot.allCases, id: \.self) { s in
+                            let on = s == slot
+                            Button { slot = s } label: {
+                                Text(s.title)
+                                    .font(.footnote.weight(.bold))
+                                    .padding(.horizontal, Space.m)
+                                    .frame(minHeight: 36)
+                            }
+                            .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.ink : Theme.card,
+                                                           foreground: on ? Theme.paper : Theme.ink,
+                                                           shape: AnyShape(Theme.pill),
+                                                           depth: 2))
+                            .accessibilityAddTraits(on ? .isSelected : [])
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, Theme.gutter)
                 }
-                .pickerStyle(.menu)
+                .padding(.horizontal, -Theme.gutter)
                 .onChange(of: slot) { previewing = nil }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: Space.s)], spacing: Space.s) {
                     ForEach(CosmeticCatalog.items(in: slot)) { item in
                         ShopTile(item: item, selected: previewing?.id == item.id) {
                             previewing = item
@@ -42,8 +61,8 @@ struct ShopView: View {
                     .font(.footnote)
                     .foregroundStyle(Theme.muted)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.vertical, Space.m)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
@@ -104,9 +123,10 @@ private struct ShopTile: View {
         let owned = inv.owns(item.id)
         let wearing = inv.equipped(item.slot).id == item.id
         Button(action: onTap) {
-            VStack(spacing: 8) {
-                swatch.frame(height: 56)
-                Text(item.name).font(.subheadline.bold()).multilineTextAlignment(.center)
+            VStack(spacing: 6) {
+                swatch.frame(height: 48)
+                Text(item.name).font(.footnote.bold()).multilineTextAlignment(.center)
+                    .lineLimit(2).minimumScaleFactor(0.85)
                 Group {
                     if wearing { Label("On", systemImage: "checkmark") }
                     else if owned { Text("Owned") }
@@ -116,10 +136,10 @@ private struct ShopTile: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Theme.muted)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 130)
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 112)
         }
-        .buttonStyle(ChunkyButtonStyle(fill: selected ? Theme.spark.opacity(0.35) : Theme.card))
+        .buttonStyle(ChunkyButtonStyle(fill: selected ? Theme.spark.opacity(0.35) : Theme.card, depth: 3))
         .accessibilityLabel("\(item.name), \(wearing ? "wearing" : owned ? "owned" : item.price.map { "\($0) Sparks" } ?? "locked")")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -128,7 +148,7 @@ private struct ShopTile: View {
         let look = CardLook(store: store, previewing: item)
         switch item.slot {
         case .avatar, .border:
-            AvatarView(avatar: look.avatar, border: look.border, name: look.name, size: 48)
+            AvatarView(avatar: look.avatar, border: look.border, name: look.name, size: 44)
         case .cardBackground:
             CardPattern(background: item)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -136,7 +156,7 @@ private struct ShopTile: View {
         case .cardShape:
             CardShape(kind: item.shape ?? .rounded)
                 .stroke(Theme.ink, lineWidth: 2)
-                .frame(maxWidth: 110)
+                .frame(maxWidth: 84)
         case .emblem:
             Image(systemName: item.symbol ?? "circle.slash")
                 .font(.title.bold())
