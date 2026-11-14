@@ -282,14 +282,14 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
     }
 
     @Test func cardExtrasAreBuyableAndEquippable() {
-        var wallet = Wallet(sparks: 1000)
+        var wallet = Wallet(sparks: 2000)
         var inv = Inventory()
         for id in ["color.coral", "letter.serif", "sticker.heart", "finish.holo", "shape.tag", "bg.zigzag"] {
             #expect(inv.buy(id, with: &wallet), "\(id)")
             inv.equip(id)
             #expect(inv.equipped(CosmeticCatalog.item(id)!.slot).id == id)
         }
-        #expect(wallet.sparks == 1000 - 60 - 150 - 100 - 600 - 300 - 300)
+        #expect(wallet.sparks == 2000 - 60 - 150 - 100 - 600 - 300 - 300)
     }
 
     @Test func oldSavesGetNewStarterItemsAndStampRewards() throws {
