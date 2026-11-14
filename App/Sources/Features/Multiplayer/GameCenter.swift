@@ -229,7 +229,7 @@ final class GameCenter: NSObject {
                 busy.insert(match.matchID)
                 defer { busy.remove(match.matchID) }
                 if (try? await passOrFinish(match, data: data)) != nil {
-                    return await item(for: match, data: data)
+                    return await self.item(for: match, data: data)
                 }
             }
             item.status = .yourTurn

@@ -165,7 +165,7 @@ public struct ChallengeData: Codable, Equatable, Sendable {
 }
 
 extension JSONEncoder {
-    static let challenge: JSONEncoder = {
+    public static let challenge: JSONEncoder = {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .secondsSince1970
         return e
@@ -173,7 +173,7 @@ extension JSONEncoder {
 }
 
 extension JSONDecoder {
-    static let challenge: JSONDecoder = {
+    public static let challenge: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .secondsSince1970
         return d
