@@ -113,9 +113,14 @@ private struct BoardRow: View {
         }
         .foregroundStyle(Theme.ink)
         .padding(.vertical, 10)
-        .padding(.horizontal, entry.isMe ? Space.s : 0)
-        .background(entry.isMe ? Theme.spark.opacity(0.25) : .clear,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // Highlight bleeds outward so your row's content lines up with the others.
+        .background {
+            if entry.isMe {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.spark.opacity(0.25))
+                    .padding(.horizontal, -Space.s)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Number \(entry.rank), \(entry.isMe ? "you" : entry.name), \(board.format(entry.value))")
     }
@@ -277,8 +282,17 @@ private struct FriendRow: View {
             parts.append("Not played yet")
         }
         if open > 0 { parts.append("\(open) in progress") }
-        return parts.joined(separator: " · ")
+        return joinedKeepingPhrases(parts)
     }
+}
+
+/// Joins short facts with " · " so a line can only wrap between facts,
+/// never inside one ("1 in progress") or before a dot.
+func joinedKeepingPhrases(_ parts: [String]) -> String {
+    parts
+        .flatMap { $0.components(separatedBy: " · ") }
+        .map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }
+        .joined(separator: "\u{00A0}· ")
 }
 
 /// One finished game: who, the rules, the score.
@@ -294,7 +308,7 @@ struct GameRow: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 Text(showsOpponent
-                     ? "\(game.setup.summary) · \(game.playedAt.formatted(.relative(presentation: .named)))"
+                     ? joinedKeepingPhrases([game.setup.summary, game.playedAt.formatted(.relative(presentation: .named))])
                      : game.playedAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption)
                     .foregroundStyle(Theme.muted)
