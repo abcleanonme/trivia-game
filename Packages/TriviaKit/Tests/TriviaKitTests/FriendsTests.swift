@@ -116,10 +116,14 @@ private func game(_ id: String, vs opponent: String = "alex", _ outcome: Challen
 @Suite struct ChallengeHistoryTests {
     @Test func addsEachMatchOnceNewestFirst() {
         var h = ChallengeHistory()
-        #expect(h.add(game("m1", .won, mine: 900, theirs: 700, at: 100)))
-        #expect(h.add(game("m2", .lost, mine: 600, theirs: 800, at: 300)))
-        #expect(h.add(game("m3", .won, mine: 1_000, theirs: 400, at: 200)))
-        #expect(!h.add(game("m1", .won, mine: 900, theirs: 700, at: 100)))
+        let addedFirst = h.add(game("m1", .won, mine: 900, theirs: 700, at: 100))
+        let addedSecond = h.add(game("m2", .lost, mine: 600, theirs: 800, at: 300))
+        let addedThird = h.add(game("m3", .won, mine: 1_000, theirs: 400, at: 200))
+        let addedDuplicate = h.add(game("m1", .won, mine: 900, theirs: 700, at: 100))
+        #expect(addedFirst)
+        #expect(addedSecond)
+        #expect(addedThird)
+        #expect(!addedDuplicate)
         #expect(h.games.map(\.matchID) == ["m2", "m3", "m1"])
     }
 
