@@ -61,6 +61,7 @@ final class PlayerStore {
         } else {
             progress = PlayerProgress()
         }
+        applyTheme()
     }
 
     // MARK: Today
@@ -127,12 +128,19 @@ final class PlayerStore {
         progress.inventory.equip(cosmetic.id)
         save()
         saveProgress()
+        applyTheme()
         return true
     }
 
     func equip(_ cosmetic: Cosmetic) {
         progress.inventory.equip(cosmetic.id)
         saveProgress()
+        applyTheme()
+    }
+
+    /// Points the app's colors and background at the equipped theme.
+    private func applyTheme() {
+        ThemeManager.shared.apply(progress.inventory.equipped(.theme).id)
     }
 
     func updateCard(_ change: (inout PlayerCard) -> Void) {

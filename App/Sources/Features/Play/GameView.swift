@@ -40,7 +40,7 @@ struct GameView: View {
                 }
             }
         }
-        .background(Theme.paper.ignoresSafeArea())
+        .themeBackground()
         .onAppear { if session == nil { start() } }
         .onChange(of: session?.phase == .finished) { _, finished in
             if finished, let session { rewards = store.finish(session, for: current) }
