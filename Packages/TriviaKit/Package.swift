@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "TriviaKit",
-    platforms: [.iOS("27.1"), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15)],
     products: [
         .library(name: "TriviaKit", targets: ["TriviaKit"])
     ],

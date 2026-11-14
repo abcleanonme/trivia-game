@@ -23,6 +23,8 @@ struct SettingsView: View {
                 LabeledContent("Version", value: Self.version)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.paper)
         .navigationTitle("Settings")
     }
 
@@ -56,6 +58,8 @@ struct CreditsView: View {
                     .font(.subheadline)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.paper)
         .navigationTitle("Credits")
     }
 }

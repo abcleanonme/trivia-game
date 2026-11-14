@@ -122,6 +122,14 @@ final class PlayerStore {
         return rewards
     }
 
+    /// Questions for a new friend challenge. Always timed: relaxed mode is
+    /// solo and Daily only, so both players race the same clock.
+    func newChallenge() -> ChallengeData {
+        let round = bank.dealRound(reserve: GameRules.challengePowerUpsPerRound, seen: seen)
+        remember(round.questions[...])
+        return ChallengeData(questions: round.questions, reserve: round.reserve)
+    }
+
     private func remember(_ questions: ArraySlice<Question>) {
         seen.markSeen(questions)
         if let data = try? JSONEncoder().encode(seen) {

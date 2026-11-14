@@ -3,14 +3,14 @@ name: Trivia
 options:
   bundleIdPrefix: com.abcapps
   deploymentTarget:
-    iOS: "27.1"
+    iOS: "18.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "4"
 packages:
   TriviaKit:
     path: Packages/TriviaKit
@@ -23,6 +23,12 @@ targets:
       - App/Resources
     dependencies:
       - package: TriviaKit
+      - sdk: GameKit.framework
+    # Game Center: friend challenges (turn-based matches).
+    entitlements:
+      path: App/Trivia.entitlements
+      properties:
+        com.apple.developer.game-center: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.abcapps.trivia
