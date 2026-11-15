@@ -20,6 +20,7 @@ struct QuizView: View {
 
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @State private var confirmingQuit = false
     @State private var reporting: Question?
@@ -38,7 +39,7 @@ struct QuizView: View {
         if let question = session.currentQuestion {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 12) {
                         topBar
                         rowLayout {
                             HStack(spacing: 8) {
@@ -49,19 +50,25 @@ struct QuizView: View {
                             ClockView(session: session)
                         }
                         Text(question.prompt)
-                            .font(Theme.display(.title))
+                            .font(Theme.display(.title2))
                             .foregroundStyle(Theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                            // Room for two lines, so answers don't jump
+                            // between short and long questions.
+                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                            .padding(.vertical, 4)
                             .accessibilityAddTraits(.isHeader)
+                            .staggeredAppear(0, distance: 10)
                             .id(question.id)
-                        LazyVGrid(columns: columns, spacing: 12) {
+                        LazyVGrid(columns: columns, spacing: 10) {
                             ForEach(question.choices.indices, id: \.self) { i in
                                 AnswerButton(letter: Self.letters[i],
                                              title: question.choices[i],
                                              style: style(for: i, in: question)) {
                                     onAnswer(i)
                                 }
+                                // Answers deal in one after another.
+                                .staggeredAppear(i + 1)
                             }
                         }
                         // Fresh views per question, so old answers never crossfade
@@ -73,7 +80,7 @@ struct QuizView: View {
                             bottomBar.id(Self.bottomBarID)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.gutter)
                     .padding(.top, 8)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 760)
@@ -95,12 +102,20 @@ struct QuizView: View {
             .safeAreaInset(edge: .bottom) {
                 if !inlineBottomBar {
                     bottomBar
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, Theme.gutter)
+                        .padding(.top, 8)
+                        .padding(.bottom, 10)
                         .frame(maxWidth: 760)
                         .frame(maxWidth: .infinity)
                         .background(Theme.paper)
                 }
+            }
+            .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: lastResult == nil)
+            .overlay {
+                ConfettiBurst(trigger: session.results.count,
+                              active: session.results.last?.correct == true,
+                              intensity: (session.results.last?.streak ?? 0) >= 3 ? 1 : 0.5)
+                    .ignoresSafeArea()
             }
             .sensoryFeedback(trigger: session.results.count) { old, new in
                 guard hapticsEnabled, new > old, let r = session.results.last else { return nil }
@@ -186,8 +201,10 @@ struct QuizView: View {
                         secondChance: secondChanceOffer,
                         onSecondChance: { onPowerUp(.secondChance) },
                         onNext: onNext)
+                .transition(.motion(.bottom, reduce: reduceMotion))
         } else {
             PowerUpTray(session: session, stock: stock, onUse: onPowerUp)
+                .transition(.opacity)
         }
     }
 
@@ -215,9 +232,7 @@ struct QuizView: View {
                 rowLayout {
                     Text(progressText)
                     if !typeSize.isAccessibilitySize { Spacer() }
-                    Label("Streak \(session.streak)", systemImage: "flame.fill")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(session.streak >= 3 ? Theme.wrong : Theme.muted)
+                    InRoundStreak(streak: session.streak)
                 }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Theme.muted)
@@ -287,7 +302,7 @@ private struct ProgressBar: View {
             }
         }
         .frame(height: 10)
-        .animation(.easeOut(duration: 0.25), value: value)
+        .animation(Motion.settle, value: value)
         .accessibilityHidden(true)
     }
 }
@@ -295,6 +310,10 @@ private struct ProgressBar: View {
 /// Seconds left, with a ring that drains. Turns orange in the last 5 seconds.
 private struct ClockView: View {
     let session: GameSession
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Bumped when Extra time lands, to float a "+10s" over the clock.
+    @State private var bonus = 0
 
     private var left: Double { session.roundTimeRemaining ?? session.timeRemaining }
     private var full: Double { session.roundTimeRemaining == nil ? GameRules.questionTime : GameMode.speedRoundSeconds }
@@ -318,6 +337,29 @@ private struct ClockView: View {
                     .font(Theme.display(.title2).monospacedDigit())
                     .foregroundStyle(urgent ? Theme.wrong : Theme.ink)
                     .contentTransition(.numericText(countsDown: true))
+                    // Each of the last five seconds thumps.
+                    .keyframeAnimator(initialValue: 1.0, trigger: seconds) { view, scale in
+                        view.scaleEffect(scale)
+                    } keyframes: { _ in
+                        if urgent && !reduceMotion {
+                            SpringKeyframe(1.25, duration: 0.1, spring: .snappy)
+                            SpringKeyframe(1, duration: 0.3, spring: .bouncy)
+                        } else {
+                            LinearKeyframe(1, duration: 0.01)
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if bonus > 0 {
+                            FloatingCallout(text: "+\(Int(GameRules.extraTimeSeconds))s", color: Theme.accent)
+                                .offset(y: -18)
+                                .id(bonus)
+                        }
+                    }
+            }
+            .animation(Motion.fade, value: urgent)
+            .animation(Motion.settle, value: session.timeRemaining > GameRules.questionTime)
+            .onChange(of: session.powerUpThisQuestion) { _, new in
+                if new == .extraTime { bonus += 1 }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(seconds) seconds left")
@@ -338,11 +380,21 @@ private struct AnswerButton: View {
     let action: () -> Void
 
     /// Grows with Dynamic Type so the letter always fits its badge.
-    @ScaledMetric(relativeTo: .headline) private var badgeSize: CGFloat = 38
+    @ScaledMetric(relativeTo: .headline) private var badgeSize: CGFloat = 34
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Drives the pop (correct) or shake (your wrong pick).
+    private var outcome: Bool? {
+        switch style {
+        case .correct: true
+        case .wrong: false
+        default: nil
+        }
+    }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Text(letter)
                     .font(.headline)
                     // The letter is a label, not content: cap it so long
@@ -358,15 +410,21 @@ private struct AnswerButton: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let icon {
                     Image(systemName: icon).font(.title3.bold())
+                        .drawOnTransition()
                 }
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 16)
-            .padding(.vertical, 10)
-            .frame(minHeight: 60)
+            .padding(.leading, 9)
+            .padding(.trailing, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
         }
-        .buttonStyle(ChunkyButtonStyle(fill: fill, foreground: foreground, depth: style == .idle ? 4 : 0))
+        .buttonStyle(ChunkyButtonStyle(fill: fill, foreground: foreground,
+                                       depth: 4,
+                                       outlined: style == .correct || style == .wrong))
         .disabled(style != .idle)
+        .scaleEffect(style == .eliminated && !reduceMotion ? 0.97 : 1)
+        .animation(Motion.choose(Motion.pop, reduce: reduceMotion), value: style)
+        .revealEffect(outcome)
         .accessibilityLabel(accessibilityText)
     }
 
@@ -421,6 +479,34 @@ private struct AnswerButton: View {
     }
 }
 
+/// "Streak N" with a flame that hops each time the streak grows and keeps
+/// flickering while it's hot (3+).
+private struct InRoundStreak: View {
+    let streak: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hops = 0
+
+    private var hot: Bool { streak >= 3 }
+
+    var body: some View {
+        Label {
+            Text("Streak \(streak)")
+                .contentTransition(.numericText(value: Double(streak)))
+        } icon: {
+            Image(systemName: "flame.fill")
+                .symbolEffect(.bounce.up, options: .nonRepeating, value: hops)
+                .symbolEffect(.breathe, options: .repeating, isActive: hot && !reduceMotion)
+        }
+        .labelStyle(.titleAndIcon)
+        .foregroundStyle(hot ? Theme.wrong : Theme.muted)
+        .animation(Motion.choose(Motion.pop, reduce: reduceMotion), value: streak)
+        .onChange(of: streak) { old, new in
+            if new > old { hops += 1 }
+        }
+    }
+}
+
 private struct PowerUpTray: View {
     let session: GameSession
     let stock: (PowerUp) -> Int
@@ -429,36 +515,45 @@ private struct PowerUpTray: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 2 : 4)
+        Array(repeating: GridItem(.flexible(), spacing: 8), count: typeSize.isAccessibilitySize ? 2 : 4)
     }
 
     private var limitLeft: Int { session.powerUpLimit - session.powerUpsUsed }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             (typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
                 : AnyLayout(HStackLayout())) {
                 SectionLabel("Power-ups")
                 if !typeSize.isAccessibilitySize { Spacer() }
-                Text("1 per question · \(limitLeft) left this round")
+                Text("1 per question · \(limitLeft) left")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.muted)
             }
-            LazyVGrid(columns: columns, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(PowerUp.trayOrder) { p in
                     let count = stock(p)
                     let active = session.powerUpThisQuestion == p
                     Button { onUse(p) } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: p.systemImage).font(.headline)
-                            Text(p.shortTitle).font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.7)
-                            Text(active ? "Active" : "\(count) left").font(.caption2.weight(.semibold))
+                        VStack(spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: p.systemImage).font(.footnote.bold())
+                                    .symbolEffect(.bounce, options: .nonRepeating, value: active)
+                                Text(p.shortTitle).font(.subheadline.bold())
+                            }
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            Text(active ? "Active" : "\(count) left")
+                                .font(.caption2.weight(.semibold))
+                                .opacity(count == 0 && !active ? 0.7 : 1)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .padding(.horizontal, 4)
+                        .frame(maxWidth: .infinity, minHeight: 50)
                     }
                     .buttonStyle(ChunkyButtonStyle(fill: active ? Theme.spark : Theme.card,
                                                    foreground: active ? Theme.onSpark : Theme.ink))
+                    .animation(Motion.pop, value: active)
                     .disabled(active || count == 0 || !session.canUse(p))
                     .accessibilityLabel("\(p.title), \(count) left")
                     .accessibilityHint(p.summary)
@@ -477,9 +572,26 @@ private struct FeedbackBar: View {
     let onNext: () -> Void
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var landed = false
+
+    /// Streaks of 3 and up get a callout chip.
+    private var hotStreak: Bool { result.correct && result.streak >= 3 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if hotStreak {
+                Label("\(result.streak) in a row!", systemImage: "flame.fill")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Theme.onSpark)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Theme.pill.fill(Theme.spark))
+                    .overlay(Theme.pill.stroke(Theme.ink, lineWidth: Theme.border))
+                    .scaleEffect(landed || reduceMotion ? 1 : 0.4, anchor: .leading)
+                    .opacity(landed ? 1 : 0)
+                    .symbolEffect(.bounce.up, options: .nonRepeating, value: landed)
+            }
             if typeSize.isAccessibilitySize {
                 // Too big to sit side by side: stack, full-width Next.
                 Text(title).font(Theme.display(.title2))
@@ -489,6 +601,7 @@ private struct FeedbackBar: View {
                 HStack(alignment: .center, spacing: 12) {
                     Image(systemName: icon)
                         .font(.title.bold())
+                        .symbolEffect(.bounce, options: .nonRepeating, value: landed)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title).font(Theme.display(.title2))
@@ -508,9 +621,12 @@ private struct FeedbackBar: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(16)
-        .card(fill: result.correct ? Theme.correct : Theme.wrong, radius: 22)
+        .padding(Theme.cardPadding)
+        .card(fill: result.correct ? Theme.correct : Theme.wrong, radius: Theme.cardRadius)
         .accessibilityElement(children: .contain)
+        .onAppear {
+            withAnimation(Motion.choose(Motion.pop, reduce: reduceMotion).delay(0.12)) { landed = true }
+        }
     }
 
     private var icon: String {
@@ -521,7 +637,7 @@ private struct FeedbackBar: View {
         Button(action: onNext) {
             Text(isLast ? "Results" : "Next")
                 .font(.headline)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, Theme.gutter)
                 .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 44)
         }
         .buttonStyle(.chunky(fill: Theme.card, capsule: true))

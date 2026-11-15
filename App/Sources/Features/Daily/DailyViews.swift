@@ -6,45 +6,60 @@ struct DailyHomeCard: View {
     let onPlay: () -> Void
 
     @Environment(PlayerStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let today = store.today
         let record = store.todaysDaily
-        VStack(alignment: .leading, spacing: 10) {
+        // Text on the left, the one action on the right (stacks at
+        // accessibility sizes), so the card stays short on Home.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Space.m))
+        VStack(alignment: .leading, spacing: Space.s) {
             HStack(alignment: .firstTextBaseline) {
                 SectionLabel("Daily #\(today.dailyNumber)")
                 Spacer()
                 StreakBadge(days: store.dailyStreak, freezes: store.progress.streak.freezes)
             }
-            if let record {
-                Text(record.finished ? "\(record.correct) of \(record.marks.count) today" : "Left early today")
-                    .font(Theme.display(.title2))
-                    .foregroundStyle(Theme.ink)
-                DailyGrid(marks: record.marks, size: 22)
-                Text("A new Daily starts at midnight.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.muted)
-                if !record.marks.isEmpty {
-                    DailyShareButton(record: record)
+            layout {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    if let record {
+                        Text(record.finished ? "\(record.correct) of \(record.marks.count) today" : "Left early today")
+                            .font(Theme.display(.title3))
+                            .foregroundStyle(Theme.ink)
+                        DailyGrid(marks: record.marks, size: 16)
+                            .padding(.leading, -2)
+                        Text("A new Daily starts at midnight.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.muted)
+                    } else {
+                        Text("Same 10 for everyone. One try.")
+                            .font(Theme.display(.title3))
+                            .foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("+\(DailyChallenge.finishBonus) Sparks, or +\(DailyChallenge.perfectBonus) for a perfect 10.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            } else {
-                Text("Same 10 questions for everyone. One try.")
-                    .font(Theme.display(.title2))
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Finish for +\(DailyChallenge.finishBonus) Sparks, or +\(DailyChallenge.perfectBonus) for a perfect 10.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.muted)
-                Button(action: onPlay) {
-                    Text("Play the Daily")
-                        .font(.headline)
-                        .padding(.horizontal, 22)
-                        .frame(minHeight: 48)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let record {
+                    if !record.marks.isEmpty { DailyShareButton(record: record) }
+                } else {
+                    Button(action: onPlay) {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.headline)
+                            .padding(.horizontal, Space.l)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+                    .accessibilityLabel("Play the Daily")
                 }
-                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
             }
         }
-        .padding(20)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(drop: 4)
     }
@@ -177,16 +192,16 @@ struct DailyShareButton: View {
                       preview: SharePreview("Quizio Daily #\(record.day.dailyNumber)", image: image)) {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .font(.headline)
-                    .padding(.horizontal, 22)
-                    .frame(minHeight: 48)
+                    .padding(.horizontal, Space.l)
+                    .frame(minHeight: 44)
             }
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
         } else {
             ShareLink(item: record.shareText) {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .font(.headline)
-                    .padding(.horizontal, 22)
-                    .frame(minHeight: 48)
+                    .padding(.horizontal, Space.l)
+                    .frame(minHeight: 44)
             }
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
         }
@@ -198,8 +213,8 @@ struct DailyShareSection: View {
     let record: DailyRecord
 
     var body: some View {
-        VStack(spacing: 12) {
-            DailyGrid(marks: record.marks, size: 26)
+        VStack(spacing: Space.s) {
+            DailyGrid(marks: record.marks, size: 24)
             if record.streak > 0 {
                 Text(record.finished ? "\(record.streak)-day streak" : "Left early, so today won't extend your streak")
                     .font(.subheadline.weight(.semibold))

@@ -7,6 +7,8 @@ public enum GameRules {
     public static let basePoints = 100
     public static let maxSpeedBonus = 50
     public static let soloPowerUpsPerRound = 3
+    /// Friend challenges use your own stock, like casual multiplayer.
+    public static let challengePowerUpsPerRound = 2
     public static let questionsPerRound = 10
     /// 1 Spark per this many points.
     public static let pointsPerSpark = 10

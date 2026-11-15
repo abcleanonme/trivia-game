@@ -43,6 +43,8 @@ struct CardEditorView: View {
                 Text("Show a stamp you've earned in the card's corner instead of your emblem.")
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.paper)
         .navigationTitle("Player Card")
         .onAppear { name = p.card.name }
     }

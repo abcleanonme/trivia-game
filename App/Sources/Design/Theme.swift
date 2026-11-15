@@ -22,6 +22,12 @@ enum Theme {
     static let wrong = Color(light: 0xC2410C, dark: 0xC2410C)
 
     static let corner: CGFloat = 18
+    /// Corner radius and inner padding shared by every card, so cards on
+    /// different screens line up and feel like one set.
+    static let cardRadius: CGFloat = 22
+    static let cardPadding: CGFloat = 16
+    /// Side margin for every scrolling screen.
+    static let gutter: CGFloat = 20
     /// Looks like a capsule on one line, but stays a rounded rectangle (not
     /// an oval) when large text wraps onto several lines.
     static let pill = RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -31,6 +37,25 @@ enum Theme {
     /// SF Rounded, which keeps the friendly game-show feel and Dynamic Type.
     static func display(_ style: Font.TextStyle) -> Font {
         .system(style, design: .rounded, weight: .bold)
+    }
+}
+
+/// The spacing scale. Stick to these steps so gaps read as deliberate.
+enum Space {
+    static let xs: CGFloat = 4
+    static let s: CGFloat = 8
+    static let m: CGFloat = 12
+    static let l: CGFloat = 16
+    static let xl: CGFloat = 24
+}
+
+extension View {
+    /// Small uppercase label above a title or section ("DAILY #12",
+    /// "CATEGORY FOCUS"). One style everywhere.
+    func eyebrow() -> some View {
+        font(.caption.weight(.bold))
+            .textCase(.uppercase)
+            .kerning(0.8)
     }
 }
 
@@ -58,6 +83,9 @@ struct ChunkyButtonStyle: ButtonStyle {
     var foreground: Color = Theme.ink
     var shape: AnyShape = AnyShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
     var depth: CGFloat = 4
+    /// Keep the ink outline when disabled (e.g. a revealed answer), instead
+    /// of fading to the light disabled line.
+    var outlined = false
 
     @Environment(\.isEnabled) private var isEnabled
 
@@ -67,10 +95,12 @@ struct ChunkyButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(foreground)
             .background(shape.fill(fill))
-            .overlay(shape.stroke(isEnabled ? Theme.ink : Theme.line, lineWidth: Theme.border))
+            .overlay(shape.stroke(isEnabled || outlined ? Theme.ink : Theme.line, lineWidth: Theme.border))
             .offset(y: pressed ? drop : 0)
             .background(shape.fill(Theme.shadow).offset(y: drop))
-            .padding(.bottom, drop)
+            // Reserve the full depth even when the drop is hidden, so a
+            // button that becomes disabled doesn't shift everything below it.
+            .padding(.bottom, depth)
             .animation(.easeOut(duration: 0.08), value: pressed)
     }
 }
@@ -87,7 +117,7 @@ extension ButtonStyle where Self == ChunkyButtonStyle {
 /// An outlined card container.
 struct CardBackground: ViewModifier {
     var fill: Color = Theme.card
-    var radius: CGFloat = 24
+    var radius: CGFloat = Theme.cardRadius
     var drop: CGFloat = 0
 
     func body(content: Content) -> some View {
@@ -101,7 +131,7 @@ struct CardBackground: ViewModifier {
 }
 
 extension View {
-    func card(fill: Color = Theme.card, radius: CGFloat = 24, drop: CGFloat = 0) -> some View {
+    func card(fill: Color = Theme.card, radius: CGFloat = Theme.cardRadius, drop: CGFloat = 0) -> some View {
         modifier(CardBackground(fill: fill, radius: radius, drop: drop))
     }
 }

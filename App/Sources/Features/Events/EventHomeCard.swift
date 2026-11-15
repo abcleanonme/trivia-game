@@ -6,6 +6,7 @@ struct EventHomeCard: View {
     let onPlay: (WeeklyEvent, Int) -> Void
 
     @Environment(PlayerStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let event = store.currentEvent
@@ -13,7 +14,10 @@ struct EventHomeCard: View {
         let today = store.today
         let daysLeft = 6 - (today - today.weekStart)
         let reward = CosmeticCatalog.item(event.rewardID)
-        VStack(alignment: .leading, spacing: 10) {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Space.m))
+        VStack(alignment: .leading, spacing: Space.s) {
             HStack {
                 SectionLabel("This week")
                 Spacer()
@@ -21,29 +25,30 @@ struct EventHomeCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.muted)
             }
-            Label(event.title, systemImage: event.systemImage)
-                .font(Theme.display(.title2))
-                .foregroundStyle(Theme.ink)
-            Text(event.blurb)
-                .font(.subheadline)
-                .foregroundStyle(Theme.muted)
-            EventTrack(progress: progress)
-            if let reward {
-                Text(progress.completed
-                     ? "Unlocked: \(reward.name) \(reward.slot.title.lowercased())"
-                     : "Fill the track to unlock the \(reward.name) \(reward.slot.title.lowercased())")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
+            layout {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Label(event.title, systemImage: event.systemImage)
+                        .font(Theme.display(.title3))
+                        .foregroundStyle(Theme.ink)
+                    Text(event.blurb)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button { onPlay(event, today.weekIndex) } label: {
+                    Label(progress.rounds == 0 ? "Play" : "Again",
+                          systemImage: progress.rounds == 0 ? "play.fill" : "arrow.clockwise")
+                        .font(.headline)
+                        .padding(.horizontal, Space.l)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
+                .accessibilityLabel(progress.rounds == 0 ? "Play event round" : "Play the event again")
             }
-            Button { onPlay(event, today.weekIndex) } label: {
-                Text(progress.rounds == 0 ? "Play event round" : "Play again")
-                    .font(.headline)
-                    .padding(.horizontal, 22)
-                    .frame(minHeight: 48)
-            }
-            .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
+            EventTrack(progress: progress, reward: reward)
         }
-        .padding(20)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(drop: 4)
     }
@@ -51,9 +56,10 @@ struct EventHomeCard: View {
 
 struct EventTrack: View {
     let progress: EventProgress
+    var reward: Cosmetic? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.line)
@@ -68,12 +74,26 @@ struct EventTrack: View {
                     }
                 }
             }
-            .frame(height: 14)
-            Text("\(min(progress.points, WeeklyEvent.trackLength).formatted()) / \(WeeklyEvent.trackLength.formatted()) event points")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.muted)
+            .frame(height: 12)
+            // Points and the reward share one caption line.
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(min(progress.points, WeeklyEvent.trackLength).formatted()) / \(WeeklyEvent.trackLength.formatted()) pts")
+                Spacer(minLength: Space.s)
+                if let reward {
+                    Text(progress.completed ? "Unlocked: \(reward.name)" : "Reward: \(reward.name) \(reward.slot.title.lowercased())")
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.muted)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Event track \(Int(progress.fraction * 100)) percent full")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var text = "Event track \(Int(progress.fraction * 100)) percent full"
+        if let reward { text += progress.completed ? ", unlocked \(reward.name)" : ", fill it to unlock \(reward.name)" }
+        return text
     }
 }

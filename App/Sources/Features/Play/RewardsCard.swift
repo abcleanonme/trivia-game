@@ -6,7 +6,7 @@ struct RewardsCard: View {
     let rewards: RoundRewards
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
             SectionLabel("Unlocked")
             ForEach(rewards.levelUps, id: \.category) { up in
                 line("chart.line.uptrend.xyaxis", "\(up.category) level \(up.level)", "+\(up.sparks) Sparks")
@@ -22,7 +22,7 @@ struct RewardsCard: View {
             }
         }
         .foregroundStyle(Theme.ink)
-        .padding(20)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
     }
@@ -30,13 +30,13 @@ struct RewardsCard: View {
     private func line(_ icon: String, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .font(.title3.bold())
+                .font(.headline)
                 .foregroundStyle(Theme.accent)
-                .frame(minWidth: 28)
+                .frame(minWidth: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.subheadline).foregroundStyle(Theme.muted)
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail).font(.footnote).foregroundStyle(Theme.muted)
             }
         }
         .accessibilityElement(children: .combine)
