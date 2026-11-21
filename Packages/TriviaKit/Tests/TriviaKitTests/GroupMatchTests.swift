@@ -164,7 +164,8 @@ private func turn(_ id: String, points: Int, correct: Int = 3, picks: [Challenge
         var a = MatchArchive()
         a.add(ArchivedMatch(matchID: "1", data: d, playerIDs: ["a", "b"], names: [:], finishedAt: Date(timeIntervalSince1970: 10)))
         a.add(ArchivedMatch(matchID: "2", data: d, playerIDs: ["a", "b", "c"], names: [:], finishedAt: Date(timeIntervalSince1970: 20)))
-        #expect(!a.add(ArchivedMatch(matchID: "1", data: d, playerIDs: ["a", "b"], names: [:], finishedAt: Date(timeIntervalSince1970: 10))))
+        let addedAgain = a.add(ArchivedMatch(matchID: "1", data: d, playerIDs: ["a", "b"], names: [:], finishedAt: Date(timeIntervalSince1970: 10)))
+        #expect(!addedAgain)
         #expect(a.matches.map(\.matchID) == ["2", "1"])
         #expect(a.groups.map(\.matchID) == ["2"])
     }
