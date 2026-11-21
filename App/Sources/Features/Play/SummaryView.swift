@@ -148,7 +148,7 @@ struct SummaryView: View {
             .background(Theme.paper)
             .staggeredAppear(5, step: 0.12, distance: 30)
         }
-        .background(Theme.paper)
+        .themeBackground()
     }
 
     private var sparksEarned: Int { rewards?.sparks ?? session.sparksEarned }

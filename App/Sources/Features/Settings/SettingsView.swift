@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("soundEnabled") private var soundEnabled = true
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @AppStorage("relaxedMode") private var relaxedMode = false
+    @AppStorage("animatedBackgrounds") private var animatedBackgrounds = true
 
     var body: some View {
         Form {
@@ -16,6 +17,11 @@ struct SettingsView: View {
             Section {
                 Toggle("Sound", isOn: $soundEnabled)
                 Toggle("Haptics", isOn: $hapticsEnabled)
+            }
+            Section {
+                Toggle("Animated backgrounds", isOn: $animatedBackgrounds)
+            } footer: {
+                Text("Backgrounds also hold still when Reduce Motion or Low Power Mode is on. Change your theme in Profile > Style shop.")
             }
             Section("About") {
                 NavigationLink("Credits") { CreditsView() }

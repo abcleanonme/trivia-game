@@ -48,7 +48,7 @@ struct GameView: View {
         }
         .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: session?.phase == .finished)
         .animation(Motion.choose(Motion.settle, reduce: reduceMotion), value: round)
-        .background(Theme.paper.ignoresSafeArea())
+        .themeBackground()
         .onAppear { if session == nil { start() } }
         .onChange(of: session?.phase == .finished) { _, finished in
             if finished, let session { rewards = store.finish(session, for: current) }

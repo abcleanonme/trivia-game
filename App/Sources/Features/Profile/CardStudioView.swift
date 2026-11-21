@@ -324,7 +324,7 @@ struct CardStudioView: View {
     /// A random mix of owned items, one per slot.
     private func shuffle() {
         let inv = store.progress.inventory
-        for slot in CosmeticSlot.allCases where slot != .emblem || store.progress.card.cornerStamp == nil {
+        for slot in CosmeticSlot.allCases where slot != .theme && (slot != .emblem || store.progress.card.cornerStamp == nil) {
             if let pick = CosmeticCatalog.items(in: slot).filter({ inv.owns($0.id) }).randomElement() {
                 store.equip(pick)
             }
@@ -403,6 +403,8 @@ struct CosmeticSwatch: View {
             CardShape(kind: item.shape ?? .rounded)
                 .stroke(Theme.ink, lineWidth: 2)
                 .frame(maxWidth: 76)
+        case .theme:
+            ThemeSwatch(palette: ThemePalette.palette(for: item.id))
         case .emblem:
             Image(systemName: item.symbol ?? "circle.slash")
                 .font(.title.bold())

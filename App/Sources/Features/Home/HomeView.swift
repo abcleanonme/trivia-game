@@ -31,7 +31,7 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Theme.paper)
+        .themeBackground()
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $round) { request in
             GameView(request: request, relaxed: relaxedMode)

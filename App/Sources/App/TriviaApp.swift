@@ -18,6 +18,8 @@ struct TriviaApp: App {
                 .environment(gameCenter)
                 .tint(Theme.accent)
                 .onAppear { gameCenter.authenticate() }
+                // Dark themes (Midnight, Neon Arcade) force dark mode.
+                .preferredColorScheme(ThemeManager.shared.palette.scheme)
         }
     }
 }

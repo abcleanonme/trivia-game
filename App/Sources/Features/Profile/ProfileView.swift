@@ -127,7 +127,7 @@ struct ProfileView: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
-        .background(Theme.paper)
+        .themeBackground()
         .navigationTitle("Profile")
         .toolbar(.hidden, for: .navigationBar)
     }

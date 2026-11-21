@@ -3,16 +3,20 @@ import UIKit
 
 /// Colors and type from the Design mockups (cream paper, ink outlines,
 /// electric-blue accent, Spark yellow). Each color has a dark-mode pair.
+///
+/// `paper`, `card` and `accent` come from the equipped app theme (see
+/// `ThemePalette`); everything else is fixed so text and the correct/wrong
+/// colors read the same in every theme.
 enum Theme {
-    static let paper = Color(light: 0xF7F6F2, dark: 0x14141E)
-    static let card = Color(light: 0xFFFFFF, dark: 0x22222F)
+    static var paper: Color { ThemeManager.shared.palette.paper }
+    static var card: Color { ThemeManager.shared.palette.card }
     static let ink = Color(light: 0x17172B, dark: 0xF2F1EC)
     /// The solid "drop" under chunky cards and buttons.
     static let shadow = Color(light: 0x17172B, dark: 0x000000)
     static let muted = Color(light: 0x55556A, dark: 0xA9A9BA)
     static let line = Color(light: 0xE2E0D8, dark: 0x34344A)
     static let disabled = Color(light: 0xEEEDE7, dark: 0x1B1B26)
-    static let accent = Color(light: 0x3B5BFD, dark: 0x5B76FF)
+    static var accent: Color { ThemeManager.shared.palette.accent }
     static let spark = Color(light: 0xFFC93C, dark: 0xFFC93C)
     /// Text and icons on Spark yellow stay dark in both modes.
     static let onSpark = Color(light: 0x17172B, dark: 0x17172B)
