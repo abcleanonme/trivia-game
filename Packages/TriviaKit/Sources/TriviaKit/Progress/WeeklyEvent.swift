@@ -5,8 +5,10 @@ import Foundation
 ///
 /// Themes are cut from the bank by category and a keyword pattern, so no
 /// special question files are needed. Events rotate every week (Monday to
-/// Sunday), so a missed one comes back in a later rotation; Spooky always
-/// takes the week with Halloween.
+/// Sunday), so a missed one comes back in a later rotation. Two holiday
+/// events take over their week instead: Spooky has the week with Halloween,
+/// and Thanksgiving the week with U.S. Thanksgiving (fourth Thursday of
+/// November).
 public struct WeeklyEvent: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -46,6 +48,14 @@ public struct WeeklyEvent: Identifiable, Equatable, Sendable {
         systemImage: "moon.stars.fill", categories: nil,
         pattern: #"\b(horror|ghost|halloween|vampire|zombie|witch|monster|haunted|dracula|skeleton)"#,
         rewardID: "bg.event.spooky")
+
+    /// Lowercase-only matches for turkey, cranberry and pumpkin, so the
+    /// country Turkey, The Cranberries and the Smashing Pumpkins stay out.
+    public static let thanksgiving = WeeklyEvent(
+        id: "thanksgiving", title: "Thanksgiving Feast", blurb: "Pilgrims, parades, football and the big dinner.",
+        systemImage: "leaf.fill", categories: nil,
+        pattern: #"thanksgiving|mayflower|wampanoag|plymouth|pilgrims\b|cornucopia|gobble|turducken|(?-i:\bturkeys?\b|cranberr|pumpkin)"#,
+        rewardID: "emblem.event.thanksgiving")
 
     /// The regular rotation, in order.
     public static let rotation: [WeeklyEvent] = [
@@ -91,14 +101,23 @@ public struct WeeklyEvent: Identifiable, Equatable, Sendable {
                     rewardID: "bg.event.food"),
     ]
 
-    public static let all: [WeeklyEvent] = rotation + [spooky]
+    public static let all: [WeeklyEvent] = rotation + [spooky, thanksgiving]
 
     /// The event running on a day.
     public static func event(on day: Day) -> WeeklyEvent {
         let year = day.components.year!
         if Day(year: year, month: 10, day: 31).weekIndex == day.weekIndex { return spooky }
+        if thanksgivingDay(year: year).weekIndex == day.weekIndex { return thanksgiving }
         let i = ((day.weekIndex % rotation.count) + rotation.count) % rotation.count
         return rotation[i]
+    }
+
+    /// U.S. Thanksgiving: the fourth Thursday of November.
+    public static func thanksgivingDay(year: Int) -> Day {
+        let first = Day(year: year, month: 11, day: 1)
+        // Day ordinal 0 (1970-01-01) was a Thursday.
+        let toThursday = ((-first.ordinal % 7) + 7) % 7
+        return first + toThursday + 21
     }
 }
 

@@ -173,6 +173,27 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         #expect(ids.count == WeeklyEvent.rotation.count)
     }
 
+    @Test func thanksgivingWeekIsTheFeast() {
+        #expect(WeeklyEvent.thanksgivingDay(year: 2026) == Day(year: 2026, month: 11, day: 26))
+        #expect(WeeklyEvent.thanksgivingDay(year: 2027) == Day(year: 2027, month: 11, day: 25))
+        #expect(WeeklyEvent.thanksgivingDay(year: 2029) == Day(year: 2029, month: 11, day: 22))
+        for d in 23...29 {
+            #expect(WeeklyEvent.event(on: Day(year: 2026, month: 11, day: d)).id == "thanksgiving")
+        }
+        #expect(WeeklyEvent.event(on: Day(year: 2026, month: 11, day: 22)).id != "thanksgiving")
+        #expect(WeeklyEvent.event(on: Day(year: 2026, month: 11, day: 30)).id != "thanksgiving")
+    }
+
+    @Test func thanksgivingSkipsCountryAndBands() {
+        let e = WeeklyEvent.thanksgiving
+        func q(_ p: String) -> Question { Question(category: "General", prompt: p, choices: ["a", "b"], correctIndex: 0) }
+        #expect(!e.matches(q("What is the name of the capital of Turkey?")))
+        #expect(!e.matches(q("What event inspired The Cranberries song \"Zombie\"?")))
+        #expect(!e.matches(q("Who is the lead singer of the Smashing Pumpkins?")))
+        #expect(!e.matches(q("Who directed \"Scott Pilgrim vs. the World\"?")))
+        #expect(e.matches(q("What is a baby turkey called?")))
+    }
+
     @Test func rewardsExistInCatalog() {
         for e in WeeklyEvent.all {
             let item = try! #require(CosmeticCatalog.item(e.rewardID), "\(e.id)")

@@ -214,6 +214,7 @@ public enum CosmeticCatalog {
         Cosmetic(id: "emblem.event.myths", slot: .emblem, name: "Temple", unlock: .event("myths"), symbol: "building.columns.fill"),
         Cosmetic(id: "emblem.event.retro", slot: .emblem, name: "Joystick", unlock: .event("retro"), symbol: "gamecontroller.fill"),
         Cosmetic(id: "emblem.event.football", slot: .emblem, name: "Golden Boot", unlock: .event("football"), symbol: "soccerball"),
+        Cosmetic(id: "emblem.event.thanksgiving", slot: .emblem, name: "Harvest Leaf", unlock: .event("thanksgiving"), symbol: "leaf.fill"),
     ]
 
     /// Recolors the avatar circle. "Auto" keeps each avatar's own color.
