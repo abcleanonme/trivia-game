@@ -17,10 +17,15 @@ struct ProfileView: View {
                     .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, -Space.s)
                 VStack(spacing: Space.m) {
-                    PlayerCardView(look: CardLook(store: store))
+                    // The card itself opens the Studio, so there's one obvious way in.
+                    NavigationLink { CardStudioView() } label: {
+                        PlayerCardView(look: CardLook(store: store))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens Customize card")
                     HStack(spacing: Space.s) {
-                        NavigationLink { CardEditorView() } label: {
-                            Label("Edit card", systemImage: "pencil")
+                        NavigationLink { CardStudioView() } label: {
+                            Label("Customize", systemImage: "paintbrush.pointed.fill")
                                 .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.chunky(fill: Theme.card, capsule: true))

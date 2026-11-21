@@ -281,6 +281,41 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         #expect(again.newStamps.isEmpty)
     }
 
+    @Test func cardExtrasAreBuyableAndEquippable() {
+        var wallet = Wallet(sparks: 2000)
+        var inv = Inventory()
+        for id in ["color.coral", "letter.serif", "sticker.heart", "finish.holo", "shape.tag", "bg.zigzag"] {
+            #expect(inv.buy(id, with: &wallet), "\(id)")
+            inv.equip(id)
+            #expect(inv.equipped(CosmeticCatalog.item(id)!.slot).id == id)
+        }
+        #expect(wallet.sparks == 2000 - 60 - 150 - 100 - 600 - 300 - 300)
+    }
+
+    @Test func oldSavesGetNewStarterItemsAndStampRewards() throws {
+        // An inventory saved before the card extras existed.
+        let old = Data(#"{"owned":["avatar.monogram","border.ink","shape.rounded","bg.paper","emblem.none"],"equipped":{"avatar":"avatar.monogram"}}"#.utf8)
+        let inv = try JSONDecoder().decode(Inventory.self, from: old)
+        for slot in CosmeticSlot.allCases {
+            #expect(inv.owns(inv.equipped(slot).id))
+        }
+        #expect(inv.owns("avatar.star"))
+
+        // A perfect round earned before "100%" sticker was added.
+        var p = PlayerProgress()
+        _ = p.record(finishedRound(correct: 10), kind: .solo)
+        p.inventory = Inventory()
+        let restored = try JSONDecoder().decode(PlayerProgress.self, from: JSONEncoder().encode(p))
+        #expect(restored.inventory.owns("sticker.perfect"))
+        #expect(restored.inventory.owns("border.laurel"))
+    }
+
+    @Test func hiddenShowcaseHasNoValue() {
+        var p = PlayerProgress()
+        p.card.showcase = .hidden
+        #expect(p.showcaseValue(on: Day(year: 2026, month: 12, day: 1)).isEmpty)
+    }
+
     @Test func progressRoundTripsAndToleratesMissingFields() throws {
         var p = PlayerProgress()
         _ = p.beginDaily(on: Day(year: 2026, month: 12, day: 1), relaxed: true)
