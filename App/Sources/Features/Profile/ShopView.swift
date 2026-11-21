@@ -13,7 +13,7 @@ struct ShopView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.l) {
                 HStack {
-                    SectionLabel(previewing == nil ? (slot == .theme ? "Your theme" : "Your card") : "Preview")
+                    SectionLabel(previewing == nil ? heading : "Preview")
                     Spacer()
                     SparksPill(amount: store.wallet.sparks)
                 }
@@ -21,6 +21,8 @@ struct ShopView: View {
                     ThemePreview(palette: previewPalette)
                         .frame(height: 210)
                         .animation(.default, value: previewPalette.id)
+                } else if slot == .sounds {
+                    SoundPreview(pack: previewing ?? store.progress.inventory.equipped(.sounds))
                 } else {
                     PlayerCardView(look: CardLook(store: store, previewing: previewing))
                         .animation(.default, value: previewing?.id)
@@ -55,6 +57,8 @@ struct ShopView: View {
                     ForEach(CosmeticCatalog.items(in: slot)) { item in
                         ShopTile(item: item, selected: previewing?.id == item.id) {
                             previewing = item
+                            // Hear a pack as soon as it's picked.
+                            if item.slot == .sounds { SoundEffects.shared.preview(.streak, pack: item.id) }
                         }
                     }
                 }
@@ -74,6 +78,14 @@ struct ShopView: View {
         .themeBackground()
         .navigationTitle("Style shop")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var heading: String {
+        switch slot {
+        case .theme: "Your theme"
+        case .sounds: "Your sounds"
+        default: "Your card"
+        }
     }
 
     /// The theme being previewed, or the one in use.
@@ -214,5 +226,71 @@ struct ThemeSwatch: View {
         .clipShape(shape)
         .overlay(shape.stroke(Theme.ink, lineWidth: 1.5))
         .environment(\.colorScheme, palette.scheme ?? colorScheme)
+    }
+}
+
+/// Sound pack preview: what it sounds like, one button per moment, so
+/// players can listen before spending Sparks.
+private struct SoundPreview: View {
+    let pack: Cosmetic
+
+    private static let cues: [SoundCue] = [.correct, .wrong, .streak, .tick, .powerUp, .roundEnd]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack(spacing: Space.m) {
+                SoundSwatch(item: pack).frame(width: 56, height: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pack.name).font(Theme.display(.title3)).foregroundStyle(Theme.ink)
+                    if let blurb = pack.blurb {
+                        Text(blurb).font(.subheadline).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: Space.s)], spacing: Space.s) {
+                ForEach(Self.cues, id: \.self) { cue in
+                    Button { SoundEffects.shared.preview(cue, pack: pack.id) } label: {
+                        Label(cue.title, systemImage: "play.fill")
+                            .font(.footnote.weight(.bold))
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                    }
+                    .buttonStyle(ChunkyButtonStyle(fill: Theme.paper, shape: AnyShape(Theme.pill), depth: 2))
+                    .accessibilityLabel("Play \(cue.title) sound")
+                }
+            }
+            Text("Your ring/silent switch mutes these previews.")
+                .font(.caption)
+                .foregroundStyle(Theme.muted)
+        }
+        .padding(Theme.cardPadding)
+        .card()
+        .animation(.default, value: pack.id)
+    }
+}
+
+/// Shop tile swatch for a sound pack: its symbol on its color, with a
+/// speaker badge so it reads as "sound" at a glance.
+struct SoundSwatch: View {
+    let item: Cosmetic
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Circle()
+                .fill(Color(hex: item.colors.first ?? 0x3B5BFD))
+                .overlay(Circle().stroke(Theme.ink, lineWidth: 1.5))
+                .overlay {
+                    Image(systemName: item.symbol ?? "speaker.wave.2.fill")
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
+                }
+                .aspectRatio(1, contentMode: .fit)
+            Image(systemName: "speaker.wave.2.fill")
+                .font(.caption2.bold())
+                .foregroundStyle(Theme.ink)
+                .padding(4)
+                .background(Circle().fill(Theme.card))
+                .overlay(Circle().stroke(Theme.ink, lineWidth: 1))
+        }
+        .accessibilityHidden(true)
     }
 }

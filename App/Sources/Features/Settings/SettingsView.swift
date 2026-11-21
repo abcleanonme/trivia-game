@@ -4,6 +4,7 @@ import TriviaKit
 struct SettingsView: View {
     @Environment(PlayerStore.self) private var store
     @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
+    @AppStorage(SettingKey.sound) private var soundEnabled = true
     @AppStorage(SettingKey.relaxedMode) private var relaxedMode = false
     @AppStorage(SettingKey.animatedBackgrounds) private var animatedBackgrounds = true
     @State private var confirmingClear = false
@@ -16,7 +17,13 @@ struct SettingsView: View {
                 Text("No timer and no speed bonus. You still earn points, streaks and Sparks.")
             }
             Section {
+                Toggle("Sound effects", isOn: $soundEnabled)
+                    .onChange(of: soundEnabled) { _, on in
+                        if on { SoundEffects.shared.play(.correct) }
+                    }
                 Toggle("Haptics", isOn: $hapticsEnabled)
+            } footer: {
+                Text("Sounds follow your ring/silent switch and mix with your music. Change your sound pack in Profile > Style shop.")
             }
             Section {
                 Toggle("Animated backgrounds", isOn: $animatedBackgrounds)
