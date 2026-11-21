@@ -16,6 +16,7 @@ struct SummaryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Flips once the Sparks count lands, for the bolt hop and confetti.
     @State private var sparksLanded = 0
+    @State private var playedFanfare = false
 
     var body: some View {
         ScrollView {
@@ -138,6 +139,11 @@ struct SummaryView: View {
             .staggeredAppear(5, step: 0.12, distance: 30)
         }
         .themeBackground()
+        .onAppear {
+            guard !playedFanfare else { return }
+            playedFanfare = true
+            SoundEffects.shared.play(.roundEnd)
+        }
     }
 
     private var sparksEarned: Int { rewards?.sparks ?? session.sparksEarned }

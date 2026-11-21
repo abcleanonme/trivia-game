@@ -76,6 +76,7 @@ struct PowerUpShopView: View {
 
     private func buy(_ offer: PowerUpOffer) {
         guard store.buy(offer) else { return }
+        SoundEffects.shared.play(.purchase)
         bought += 1
     }
 }

@@ -157,6 +157,7 @@ final class PlayerStore {
     func buy(_ cosmetic: Cosmetic) -> Bool {
         guard progress.inventory.buy(cosmetic.id, with: &wallet) else { return false }
         progress.inventory.equip(cosmetic.id)
+        SoundEffects.shared.play(.purchase)
         saveWallet()
         saveProgress()
         applyTheme()
@@ -169,9 +170,10 @@ final class PlayerStore {
         applyTheme()
     }
 
-    /// Points the app's colors and background at the equipped theme.
+    /// Points the app's colors, background and sounds at what's equipped.
     private func applyTheme() {
         ThemeManager.shared.apply(progress.inventory.equipped(.theme).id)
+        SoundEffects.shared.use(progress.inventory.equipped(.sounds).id)
     }
 
     func updateCard(_ change: (inout PlayerCard) -> Void) {

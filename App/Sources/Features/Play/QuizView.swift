@@ -119,6 +119,10 @@ struct QuizView: View {
                 guard hapticsEnabled, new > old, let r = session.results.last else { return nil }
                 return r.correct ? .success : .error
             }
+            .onChange(of: session.results.count) { old, new in
+                guard new > old, let r = session.results.last else { return }
+                SoundEffects.shared.play(r.timedOut ? .timeUp : !r.correct ? .wrong : r.streak >= 3 ? .streak : .correct)
+            }
             .confirmationDialog("Quit this round?", isPresented: $confirmingQuit, titleVisibility: .visible) {
                 Button("Quit round", role: .destructive, action: onQuit)
                 Button("Keep playing", role: .cancel) {}
@@ -197,16 +201,21 @@ struct QuizView: View {
             FeedbackBar(result: lastResult,
                         isLast: session.isLastQuestion,
                         secondChance: secondChanceOffer,
-                        onSecondChance: { onPowerUp(.secondChance) },
+                        onSecondChance: { usePowerUp(.secondChance) },
                         onNext: onNext)
                 .transition(.motion(.bottom, reduce: reduceMotion))
         } else {
-            PowerUpTray(session: session, stock: stock, onUse: onPowerUp)
+            PowerUpTray(session: session, stock: stock, onUse: usePowerUp)
                 .transition(.opacity)
         }
     }
 
     private static let letters = ["A", "B", "C", "D", "E", "F"]
+
+    private func usePowerUp(_ powerUp: PowerUp) {
+        if stock(powerUp) > 0 && session.canUse(powerUp) { SoundEffects.shared.play(.powerUp) }
+        onPowerUp(powerUp)
+    }
 
     /// How many Second chances the player has, if one can be used right now.
     private var secondChanceOffer: Int? {
@@ -335,6 +344,9 @@ private struct ClockView: View {
                     .font(Theme.display(.title2).monospacedDigit())
                     .foregroundStyle(urgent ? Theme.wrong : Theme.ink)
                     .contentTransition(.numericText(countsDown: true))
+                    .onChange(of: seconds) { old, new in
+                        if urgent && new < old && (1...5).contains(new) { SoundEffects.shared.play(.tick) }
+                    }
                     // Each of the last five seconds thumps.
                     .keyframeAnimator(initialValue: 1.0, trigger: seconds) { view, scale in
                         view.scaleEffect(scale)
