@@ -14,14 +14,18 @@ public enum PowerUp: String, CaseIterable, Codable, Sendable, Identifiable {
 
     public var id: String { rawValue }
 
-    /// Price in Sparks.
+    /// Price in Sparks for one. Set against earn rates (docs/sparks-economy.md):
+    /// a typical Classic round pays about 100 Sparks, so one power-up a round
+    /// costs a quarter to a half of it, and filling all three slots costs
+    /// about a whole round. Double down always costs more than it can pay
+    /// back, so it can't be used to farm Sparks.
     public var cost: Int {
         switch self {
-        case .fiftyFifty: 30
-        case .extraTime: 20
-        case .skip: 25
-        case .secondChance: 40
-        case .doubleDown: 35
+        case .extraTime: 25
+        case .skip: 35
+        case .fiftyFifty: 40
+        case .doubleDown: 50
+        case .secondChance: 50
         }
     }
 

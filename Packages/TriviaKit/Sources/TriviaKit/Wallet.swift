@@ -38,12 +38,14 @@ public struct Wallet: Codable, Equatable, Sendable {
         return true
     }
 
-    /// Spends Sparks on one power-up. Returns false if the player can't afford it.
+    /// Spends Sparks on one power-up. Returns false if the player can't
+    /// afford it or already holds the most allowed.
     @discardableResult
     public mutating func buy(_ powerUp: PowerUp) -> Bool {
-        guard sparks >= powerUp.cost else { return false }
-        sparks -= powerUp.cost
-        stock[powerUp, default: 0] += 1
-        return true
+        buy(PowerUpShop.single(powerUp))
+    }
+
+    mutating func add(_ powerUp: PowerUp, count n: Int) {
+        stock[powerUp, default: 0] += max(n, 0)
     }
 }
