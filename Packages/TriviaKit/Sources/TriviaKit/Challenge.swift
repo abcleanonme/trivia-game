@@ -244,15 +244,20 @@ public struct ChallengeData: Codable, Equatable, Sendable {
 
     /// Places for everyone who played, best first. Players level on points
     /// and correct answers share a place (1, 1, 3).
-    public func standings(among playerIDs: [String]) -> [(playerID: String, place: Int)] {
+    public func standings(among playerIDs: [String]) -> [Standing] {
         let played = turns.filter { playerIDs.contains($0.playerID) }
             .sorted { Self.rank($0) > Self.rank($1) }
-        var out: [(playerID: String, place: Int)] = []
+        var out: [Standing] = []
         for (i, t) in played.enumerated() {
             let place = i > 0 && Self.rank(played[i - 1]) == Self.rank(t) ? out[i - 1].place : i + 1
-            out.append((t.playerID, place))
+            out.append(Standing(playerID: t.playerID, place: place))
         }
         return out
+    }
+
+    public struct Standing: Equatable, Sendable {
+        public let playerID: String
+        public let place: Int
     }
 
     /// A dealt question or a spare that Skip swapped in, by ID.

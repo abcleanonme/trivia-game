@@ -285,7 +285,7 @@ final class GameCenter: NSObject {
     private func item(for match: GKTurnBasedMatch, data: ChallengeData?) async -> ChallengeItem? {
         let me = localPlayerID
         let mine = match.participants.first { $0.player?.gamePlayerID == me }
-        let seats = seats(of: match, data: data)
+        let seats = self.seats(of: match, data: data)
         let others = seats.filter { !$0.isMe }
         let isGroup = match.participants.count > 2
         // Head-to-head: the other player. Group: nobody in particular.
@@ -409,7 +409,7 @@ final class GameCenter: NSObject {
     /// The full-screen round for a match.
     func round(for match: GKTurnBasedMatch, data: ChallengeData) -> ChallengeRound {
         let me = localPlayerID
-        let seats = seats(of: match, data: data)
+        let seats = self.seats(of: match, data: data)
         let isGroup = match.participants.count > 2
         let opponent = isGroup ? nil : match.participants.first { $0.player?.gamePlayerID != me }
         return ChallengeRound(
@@ -784,8 +784,9 @@ extension GameCenter {
             // Whoever hasn't played goes first, starting with whoever holds
             // the old match's turn, so they see the group before playing the
             // old one. Players who already played never need a turn.
-            let unplayed = stillIn.filter { !data.hasPlayed($0.player!.gamePlayerID) }
-                .sorted { a, _ in a.player?.gamePlayerID == current }
+            let unplayedAll = stillIn.filter { !data.hasPlayed($0.player!.gamePlayerID) }
+            let unplayed = unplayedAll.filter { $0.player?.gamePlayerID == current }
+                + unplayedAll.filter { $0.player?.gamePlayerID != current }
             let played = stillIn.filter { data.hasPlayed($0.player!.gamePlayerID) }
             let existing = Set(stillIn.compactMap { $0.player?.gamePlayerID })
             let added = friendIDs.filter { !existing.contains($0) && $0 != me }.compactMap { knownPlayers[$0] }

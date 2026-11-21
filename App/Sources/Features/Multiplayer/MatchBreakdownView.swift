@@ -81,7 +81,7 @@ struct StandingsCard: View {
         let standings = match.data.standings(among: match.playerIDs)
         let waiting = match.playerIDs.filter { !match.data.hasPlayed($0) }
         VStack(spacing: 0) {
-            ForEach(Array(standings.enumerated()), id: \.element.playerID) { i, entry in
+            ForEach(Array(standings.enumerated()), id: \.offset) { i, entry in
                 if i > 0 { Divider().overlay(Theme.line) }
                 row(entry.playerID, place: entry.place, winner: entry.place == 1 && standings.count > 1)
             }
