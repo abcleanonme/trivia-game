@@ -20,6 +20,9 @@ extension UserDefaults {
 enum SettingKey {
     static let relaxedMode = "relaxedMode"
     static let haptics = "hapticsEnabled"
+    /// Same key the old placeholder toggle used, so a tester who turned
+    /// it off keeps sound off.
+    static let sound = "soundEnabled"
     static let animatedBackgrounds = "animatedBackgrounds"
     static let gameMode = "gameMode"
     static let difficulty = "difficulty"

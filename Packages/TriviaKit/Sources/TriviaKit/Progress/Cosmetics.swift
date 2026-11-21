@@ -5,6 +5,8 @@ import Foundation
 public enum CosmeticSlot: String, CaseIterable, Codable, Sendable, CodingKeyRepresentable {
     /// The whole app's look: paper, cards, accent and animated background.
     case theme
+    /// Sound-effect pack, voiced by `SoundCatalog`.
+    case sounds
     case avatar, border, cardShape, cardBackground, emblem
     /// Player Card extras: avatar color, name lettering, a sticker and a finish.
     case avatarColor, nameStyle, sticker, finish
@@ -12,6 +14,7 @@ public enum CosmeticSlot: String, CaseIterable, Codable, Sendable, CodingKeyRepr
     public var title: String {
         switch self {
         case .theme: "App theme"
+        case .sounds: "Sounds"
         case .avatar: "Avatar"
         case .border: "Border"
         case .cardShape: "Card shape"
@@ -62,6 +65,8 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
     public var finish: Finish? = nil
     /// App themes only: the animated background.
     public var motion: Motion? = nil
+    /// Sound packs only: a one-line description.
+    public var blurb: String? = nil
 
     public var price: Int? {
         if case .sparks(let n) = unlock { n } else { nil }
@@ -69,7 +74,7 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
 }
 
 public enum CosmeticCatalog {
-    public static let all: [Cosmetic] = themes + avatars + borders + shapes + backgrounds + emblems
+    public static let all: [Cosmetic] = themes + sounds + avatars + borders + shapes + backgrounds + emblems
         + avatarColors + letterings + stickers + finishes
 
     public static func item(_ id: String) -> Cosmetic? { byID[id] }
@@ -77,7 +82,7 @@ public enum CosmeticCatalog {
 
     /// Equipped when nothing else is.
     public static let defaults: [CosmeticSlot: String] = [
-        .theme: "theme.classic", .avatar: "avatar.monogram", .border: "border.ink", .cardShape: "shape.rounded",
+        .theme: "theme.classic", .sounds: SoundCatalog.defaultID, .avatar: "avatar.monogram", .border: "border.ink", .cardShape: "shape.rounded",
         .cardBackground: "bg.paper", .emblem: "emblem.none",
         .avatarColor: "color.auto", .nameStyle: "letter.classic", .sticker: "sticker.none", .finish: "finish.none",
     ]
@@ -120,6 +125,24 @@ public enum CosmeticCatalog {
                  colors: [0x120A1F, 0xC2247A], motion: .grid),
         Cosmetic(id: "theme.orbit", slot: .theme, name: "Deep Space", unlock: .sparks(600),
                  colors: [0x07081A, 0x6D3FD6], motion: .orbits),
+    ]
+
+    /// Sound packs. Ids match `SoundCatalog`; every sound is synthesized
+    /// on the phone. Cheaper than themes (250–450): you hear them, but they
+    /// don't change the whole screen.
+    static let sounds: [Cosmetic] = [
+        Cosmetic(id: "sound.classic", slot: .sounds, name: "Chimes", unlock: .starter,
+                 symbol: "bell.fill", colors: [0x3B5BFD], blurb: "Soft, clean chimes"),
+        Cosmetic(id: "sound.marimba", slot: .sounds, name: "Marimba", unlock: .sparks(250),
+                 symbol: "music.quarternote.3", colors: [0xB0753F], blurb: "Warm wooden mallets"),
+        Cosmetic(id: "sound.musicbox", slot: .sounds, name: "Music Box", unlock: .sparks(300),
+                 symbol: "gift.fill", colors: [0xE0559A], blurb: "Tiny tinkling bells"),
+        Cosmetic(id: "sound.arcade", slot: .sounds, name: "Arcade", unlock: .sparks(350),
+                 symbol: "gamecontroller.fill", colors: [0x7C3AED], blurb: "8-bit bleeps and buzzers"),
+        Cosmetic(id: "sound.cartoon", slot: .sounds, name: "Cartoon", unlock: .sparks(400),
+                 symbol: "theatermasks.fill", colors: [0xF4A100], blurb: "Boings and slide whistles"),
+        Cosmetic(id: "sound.cosmic", slot: .sounds, name: "Cosmic", unlock: .sparks(450),
+                 symbol: "sparkles", colors: [0x0F8A7A], blurb: "Spacey synth sweeps"),
     ]
 
     static let avatars: [Cosmetic] = [
@@ -214,6 +237,7 @@ public enum CosmeticCatalog {
         Cosmetic(id: "emblem.event.myths", slot: .emblem, name: "Temple", unlock: .event("myths"), symbol: "building.columns.fill"),
         Cosmetic(id: "emblem.event.retro", slot: .emblem, name: "Joystick", unlock: .event("retro"), symbol: "gamecontroller.fill"),
         Cosmetic(id: "emblem.event.football", slot: .emblem, name: "Golden Boot", unlock: .event("football"), symbol: "soccerball"),
+        Cosmetic(id: "emblem.event.thanksgiving", slot: .emblem, name: "Harvest Leaf", unlock: .event("thanksgiving"), symbol: "leaf.fill"),
     ]
 
     /// Recolors the avatar circle. "Auto" keeps each avatar's own color.

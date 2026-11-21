@@ -30,6 +30,7 @@ Why these numbers:
 - **Double down can't farm Sparks.** Its best possible payout (hard question on a 5+ streak; power-ups skip the speed bonus) adds 300 points, which is 30 Sparks, well under its 50 price. A unit test guards this.
 - **Second chance is priced with Double down** because it saves a streak, which is worth more than the half points it pays.
 - **Cosmetics (100–600) stay a few days of play**, so saving for one is still a goal even after buying power-ups.
+- **Sound packs (250–450) cost less than app themes (300–600)**: you hear them, but they don't change every screen. Chimes is free; the rest are in Style shop > Sounds, with a play button per sound to try before buying. All sounds are synthesized on the phone (`SoundCatalog` in TriviaKit), so there are no audio files or licenses.
 - **Stock is capped at 9 of each** so nobody hoards a huge pile and the tray badge stays one digit.
 
 Prices before this change were 20–40, which let one round buy about four power-ups, more than a round can use.
