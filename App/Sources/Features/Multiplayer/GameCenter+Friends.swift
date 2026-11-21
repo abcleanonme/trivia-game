@@ -98,7 +98,7 @@ extension GameCenter {
 
     /// Challenges in progress with this friend.
     func openChallenges(with friendID: String) -> [ChallengeItem] {
-        challenges.filter { $0.opponentID == friendID && !$0.isFinished }
+        challenges.filter { $0.includes(friendID) && !$0.isFinished }
     }
 
     // MARK: Leaderboards

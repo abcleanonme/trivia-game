@@ -47,17 +47,14 @@ private func game(_ id: String, vs opponent: String = "alex", _ outcome: Challen
 }
 
 @Suite struct ChallengeDataSetupTests {
-    @Test func classicChallengesStayReadableByOlderBuilds() {
-        let d = ChallengeData(setup: ChallengeSetup(difficulty: .hard, length: 5),
-                              questions: (0..<5).map { q($0) }, reserve: [])
-        #expect(d.version == 1)
-        #expect(d.isSupported)
-    }
-
-    @Test func survivalAndSpeedNeedTheNewFormat() {
-        let d = ChallengeData(setup: ChallengeSetup(mode: .survival), questions: [q(1)], reserve: [])
-        #expect(d.version == 2)
-        #expect(d.isSupported)
+    @Test func everyNewMatchUsesTheCurrentFormat() {
+        // So everyone in a match is on a build that understands groups,
+        // replays and cards; older builds are told to update.
+        for mode in GameMode.allCases {
+            let d = ChallengeData(setup: ChallengeSetup(mode: mode), questions: [q(1)], reserve: [])
+            #expect(d.version == ChallengeData.currentVersion)
+            #expect(d.isSupported)
+        }
     }
 
     @Test func setupSurvivesMatchData() throws {

@@ -38,6 +38,9 @@ struct RootView: View {
         .fullScreenCover(item: $gameCenter.activeRound) { round in
             ChallengeGameView(round: round)
         }
+        .sheet(item: $gameCenter.reviewing) { match in
+            NavigationStack { MatchBreakdownView(match: match, me: gameCenter.localPlayerID) }
+        }
     }
 }
 

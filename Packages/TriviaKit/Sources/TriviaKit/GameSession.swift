@@ -12,6 +12,9 @@ public struct QuestionResult: Equatable, Sendable {
     public let breakdown: ScoreBreakdown
     /// Streak after this answer.
     public let streak: Int
+    /// Seconds the question was on screen before this answer, clock or not.
+    /// Match replays use it to show answers as they happened.
+    public var answeredAfter: Double = 0
 
     public var points: Int { breakdown.total }
     public var timedOut: Bool { choice == nil }
@@ -53,6 +56,8 @@ public struct GameSession: Sendable {
 
     /// Streak before the last miss, so second chance can restore it.
     private var streakBeforeMiss: Int?
+    /// Seconds the current question has been showing (runs without a clock too).
+    private var questionElapsed: Double = 0
 
     public init(questions: [Question],
                 reserve: [Question] = [],
@@ -103,7 +108,9 @@ public struct GameSession: Sendable {
 
     /// Advances the clock. Times out the question when it reaches zero.
     public mutating func tick(by seconds: Double) {
-        guard isTimed, phase == .asking else { return }
+        guard phase == .asking else { return }
+        questionElapsed += seconds
+        guard isTimed else { return }
         if let round = roundTimeRemaining {
             roundTimeRemaining = max(round - seconds, 0)
             // The question on screen when time runs out doesn't count.
@@ -204,6 +211,7 @@ public struct GameSession: Sendable {
 
     private mutating func startQuestion() {
         timeRemaining = GameRules.questionTime
+        questionElapsed = 0
         eliminated = []
         powerUpThisQuestion = nil
         phase = .asking
@@ -224,9 +232,10 @@ public struct GameSession: Sendable {
             streak = 0
             breakdown = .zero
         }
-        let result = QuestionResult(question: q, choice: choice, correct: correct,
+        var result = QuestionResult(question: q, choice: choice, correct: correct,
                                     timeRemaining: clock, powerUp: powerUpThisQuestion,
                                     breakdown: breakdown, streak: streak)
+        result.answeredAfter = questionElapsed
         results.append(result)
         guard mode == .speed else {
             phase = .answered(result)

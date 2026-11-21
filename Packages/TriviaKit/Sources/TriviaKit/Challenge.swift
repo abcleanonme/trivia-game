@@ -10,15 +10,19 @@ public struct ChallengeTurn: Codable, Equatable, Sendable {
     /// One entry per question, in order: true when answered correctly.
     public let answers: [Bool]
     public let playedAt: Date
+    /// What they picked on each question and when, for the match breakdown
+    /// and live replay. nil in turns from builds before replays.
+    public let picks: [ChallengePick]?
 
     public init(playerID: String, points: Int, correctCount: Int, bestStreak: Int,
-                answers: [Bool], playedAt: Date = Date()) {
+                answers: [Bool], playedAt: Date = Date(), picks: [ChallengePick]? = nil) {
         self.playerID = playerID
         self.points = points
         self.correctCount = correctCount
         self.bestStreak = bestStreak
         self.answers = answers
         self.playedAt = playedAt
+        self.picks = picks
     }
 
     /// The turn a finished (or abandoned) session adds up to. Questions the
@@ -30,7 +34,8 @@ public struct ChallengeTurn: Codable, Equatable, Sendable {
         }
         self.init(playerID: playerID, points: session.totalPoints,
                   correctCount: session.correctCount, bestStreak: session.bestStreak,
-                  answers: answers, playedAt: playedAt)
+                  answers: answers, playedAt: playedAt,
+                  picks: session.results.map(ChallengePick.init(result:)))
     }
 }
 
@@ -51,9 +56,15 @@ public enum ChallengeFinalResult: Equatable, Sendable {
 /// order, and the higher score wins. Ties break on correct answers.
 public struct ChallengeData: Codable, Equatable, Sendable {
     /// Bumped when the format changes, so old builds can say "update the app".
-    /// Version 2 added Survival and Speed challenges. A Classic challenge is
-    /// still written as version 1, so friends on older builds can play it.
-    public static let currentVersion = 2
+    /// Version 2 added Survival and Speed challenges. Version 3 added group
+    /// matches, answer replays and Player Cards. Every new match is written
+    /// as the current version, so everyone in a match is on a build that
+    /// understands all of it (older builds are told to update).
+    public static let currentVersion = 3
+
+    /// Most players in one match, you included. Keeps a long round with
+    /// every answer recorded well inside Game Center's 64 KB match data.
+    public static let maxPlayers = 6
 
     public let version: Int
     public let questions: [Question]
@@ -66,13 +77,24 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     private let mode: GameMode?
     /// The level the challenger picked; nil (older matches) means Mixed.
     private let difficulty: Difficulty?
+    /// Whether players may invite more friends in. nil (older matches) means yes.
+    private let invites: Bool?
     public private(set) var turns: [ChallengeTurn]
+    /// Each player's Player Card and app build, by Game Center ID. Updated by
+    /// whoever writes the match data, so opponents see each other's cards.
+    public private(set) var players: [String: ChallengePlayer]?
+    /// Set on a head-to-head that was turned into a group match: the ID of
+    /// that group match. The head-to-head is closed without counting.
+    public var movedTo: String?
+    /// Set on a group match made from a head-to-head: the old match's ID.
+    public var groupFrom: String?
 
     public init(questions: [Question], reserve: [Question], isTimed: Bool = true,
                 powerUpLimit: Int = GameRules.challengePowerUpsPerRound,
                 category: String? = nil, mode: GameMode = .classic,
-                difficulty: Difficulty = .mixed, turns: [ChallengeTurn] = []) {
-        self.version = mode == .classic ? 1 : Self.currentVersion
+                difficulty: Difficulty = .mixed, allowsInvites: Bool = true,
+                turns: [ChallengeTurn] = []) {
+        self.version = Self.currentVersion
         self.questions = questions
         self.reserve = reserve
         // A Speed round is its clock.
@@ -81,23 +103,57 @@ public struct ChallengeData: Codable, Equatable, Sendable {
         self.category = category
         self.mode = mode
         self.difficulty = difficulty
+        self.invites = allowsInvites
         self.turns = turns
     }
 
     public init(setup: ChallengeSetup, questions: [Question], reserve: [Question]) {
         self.init(questions: questions, reserve: reserve, isTimed: setup.hasClock,
                   powerUpLimit: setup.powerUpLimit, category: setup.category,
-                  mode: setup.mode, difficulty: setup.difficulty)
+                  mode: setup.mode, difficulty: setup.difficulty, allowsInvites: setup.allowsInvites)
     }
 
     public var gameMode: GameMode { mode ?? .classic }
     public var level: Difficulty { difficulty ?? .mixed }
+    public var allowsInvites: Bool { invites ?? true }
+
+    /// The same round, questions and turns played so far, as a new group
+    /// match. Written in the current format.
+    public func groupCopy(from matchID: String) -> ChallengeData {
+        var copy = ChallengeData(questions: questions, reserve: reserve, isTimed: isTimed,
+                                 powerUpLimit: powerUpLimit, category: category, mode: gameMode,
+                                 difficulty: level, allowsInvites: allowsInvites, turns: turns)
+        copy.players = players
+        copy.groupFrom = matchID
+        return copy
+    }
+
+    // MARK: Players
+
+    public func player(_ playerID: String) -> ChallengePlayer? { players?[playerID] }
+
+    /// Saves a player's card and build into the match.
+    public mutating func setPlayer(_ info: ChallengePlayer, for playerID: String) {
+        var all = players ?? [:]
+        all[playerID] = info
+        players = all
+    }
+
+    /// Other players on a newer build than `build`, so you can be told to update.
+    public func playersAhead(of build: Int, me: String) -> [String] {
+        (players ?? [:]).filter { $0.key != me && $0.value.build > build }.map(\.key).sorted()
+    }
+
+    /// Other players on an older build than `build`.
+    public func playersBehind(_ build: Int, me: String) -> [String] {
+        (players ?? [:]).filter { $0.key != me && $0.value.build < build }.map(\.key).sorted()
+    }
 
     /// The rules this match was made with, for a rematch on the same terms.
     public var setup: ChallengeSetup {
         ChallengeSetup(mode: gameMode, difficulty: level, category: category,
                        length: gameMode == .classic ? questions.count : GameRules.questionsPerRound,
-                       isTimed: isTimed, powerUpLimit: powerUpLimit)
+                       isTimed: isTimed, powerUpLimit: powerUpLimit, allowsInvites: allowsInvites)
     }
 
     // MARK: Encoding
@@ -184,6 +240,24 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     /// or loss.
     public func isContested(between a: String, and b: String) -> Bool {
         hasPlayed(a) && hasPlayed(b)
+    }
+
+    /// Places for everyone who played, best first. Players level on points
+    /// and correct answers share a place (1, 1, 3).
+    public func standings(among playerIDs: [String]) -> [(playerID: String, place: Int)] {
+        let played = turns.filter { playerIDs.contains($0.playerID) }
+            .sorted { Self.rank($0) > Self.rank($1) }
+        var out: [(playerID: String, place: Int)] = []
+        for (i, t) in played.enumerated() {
+            let place = i > 0 && Self.rank(played[i - 1]) == Self.rank(t) ? out[i - 1].place : i + 1
+            out.append((t.playerID, place))
+        }
+        return out
+    }
+
+    /// A dealt question or a spare that Skip swapped in, by ID.
+    public func question(withID id: UUID) -> Question? {
+        questions.first { $0.id == id } ?? reserve.first { $0.id == id }
     }
 
     /// Points first, then correct answers.

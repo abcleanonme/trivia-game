@@ -40,7 +40,7 @@ struct ChallengeGameView: View {
                          onNext: { update { $0.advance() } },
                          onQuit: { send(session) },
                          onReport: { q, reason in store.report(q, reason: reason) },
-                         quitMessage: "Your score so far is sent to \(round.opponentName). Questions you didn't reach count as wrong.")
+                         quitMessage: "Your score so far is sent to \(round.isGroup ? "the group" : round.opponentName). Questions you didn't reach count as wrong.")
             case .sending:
                 ProgressView("Sending your score…")
                     .font(.headline)
@@ -140,20 +140,9 @@ private struct ChallengeIntroView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Space.l) {
-                VStack(spacing: Space.s) {
-                    SectionLabel("Challenge")
-                    HStack(spacing: 14) {
-                        PlayerBadge(name: "You", size: 56)
-                        Text("vs").font(Theme.display(.title2)).foregroundStyle(Theme.muted)
-                        PlayerBadge(name: round.opponentName, size: 56)
-                    }
-                    .accessibilityHidden(true)
-                    Text("You vs \(round.opponentName)")
-                        .font(Theme.display(.title))
-                        .foregroundStyle(Theme.ink)
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
-                }
+                MatchHeader(round: round)
+
+                VersionNotice(seats: round.seats)
 
                 if let target = round.data.scoreToBeat(for: me) {
                     VStack(spacing: 4) {
@@ -175,6 +164,10 @@ private struct ChallengeIntroView: View {
                 .padding(Theme.cardPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .card()
+
+                if round.canInvite {
+                    InviteButton(round: round)
+                }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.xl)
@@ -209,7 +202,7 @@ private struct ChallengeIntroView: View {
     /// The match's rules, as the challenger set them.
     private var rules: [(icon: String, text: String)] {
         let data = round.data
-        let them = round.opponentName
+        let them = round.isGroup ? "everyone else" : round.opponentName
         var lines: [(icon: String, text: String)] = []
         switch data.gameMode {
         case .classic:
@@ -229,7 +222,9 @@ private struct ChallengeIntroView: View {
         lines.append(data.powerUpLimit > 0
             ? ("bolt.fill", "Up to \(data.powerUpLimit) power-up\(data.powerUpLimit == 1 ? "" : "s") from your own stock")
             : ("bolt.slash.fill", "No power-ups this time"))
-        lines.append(("trophy", "Highest score wins. Ties go to more correct answers"))
+        lines.append(("trophy", round.isGroup
+            ? "Highest score in the group wins. Ties go to more correct answers"
+            : "Highest score wins. Ties go to more correct answers"))
         return lines
     }
 
@@ -253,15 +248,41 @@ private struct ChallengeResultView: View {
     let onDone: () -> Void
 
     private var mine: ChallengeTurn? { data.turn(for: me) }
-    private var theirs: ChallengeTurn? { round.opponentID.flatMap(data.turn(for:)) }
     private var outcome: ChallengeOutcome? { data.outcome(for: me, among: round.playerIDs) }
+    private var place: Int? { data.standings(among: round.playerIDs).first { $0.playerID == me }?.place }
+    private var waitingOn: [String] { round.playerIDs.filter { !data.hasPlayed($0) } }
+
+    /// The round as a match record, for the standings and breakdown.
+    private var record: ArchivedMatch {
+        var names: [String: String] = [:]
+        for id in round.playerIDs { names[id] = round.name(of: id) }
+        var data = data
+        for seat in round.seats where data.player(seat.id) == nil {
+            if let card = seat.card { data.setPlayer(ChallengePlayer(card: card, build: seat.build ?? 0), for: seat.id) }
+        }
+        return ArchivedMatch(matchID: round.id, data: data, playerIDs: round.playerIDs,
+                             names: names, finishedAt: Date())
+    }
 
     private var headline: String {
+        if round.isGroup, outcome != nil, let place {
+            return place == 1 ? (outcome == .tied ? "Tied for first!" : "You won the group!")
+                : "You placed \(place)\(Self.suffix(place)) of \(round.playerIDs.count)"
+        }
         switch outcome {
-        case .won: "You won!"
-        case .lost: "\(round.opponentName) won"
-        case .tied: "It's a tie"
-        case nil: "Sent to \(round.opponentName)"
+        case .won: return "You won!"
+        case .lost: return "\(round.opponentName) won"
+        case .tied: return "It's a tie"
+        case nil: return round.isGroup ? "Score sent to the group" : "Sent to \(round.opponentName)"
+        }
+    }
+
+    private static func suffix(_ n: Int) -> String {
+        switch (n % 10, n % 100) {
+        case (1, let t) where t != 11: "st"
+        case (2, let t) where t != 12: "nd"
+        case (3, let t) where t != 13: "rd"
+        default: "th"
         }
     }
 
@@ -276,19 +297,18 @@ private struct ChallengeResultView: View {
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
                     if outcome == nil {
-                        Text("We'll let you know when they've played.")
+                        Text(waitingOn.count > 1
+                             ? "Waiting on \(waitingOn.count) players. We'll let you know when they've played."
+                             : "We'll let you know when they've played.")
                             .font(.callout)
                             .foregroundStyle(Theme.muted)
+                            .multilineTextAlignment(.center)
                     }
                 }
 
-                VStack(spacing: 14) {
-                    scoreRow(name: "You", turn: mine, highlight: outcome == .won)
-                    Rectangle().fill(Theme.line).frame(height: 2)
-                    scoreRow(name: round.opponentName, turn: theirs, highlight: outcome == .lost)
-                }
-                .padding(Theme.cardPadding)
-                .card()
+                StandingsCard(match: record, me: me)
+
+                VersionNotice(seats: round.seats)
 
                 if let mine {
                     HStack(spacing: 14) {
@@ -307,6 +327,12 @@ private struct ChallengeResultView: View {
                     .card(fill: Theme.spark, drop: 5)
                     .accessibilityElement(children: .combine)
                 }
+
+                if outcome == nil && round.canInvite {
+                    InviteButton(round: round)
+                }
+
+                MatchBreakdownView(match: record, me: me, embedded: true)
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.xl)
@@ -333,33 +359,6 @@ private struct ChallengeResultView: View {
             .readableWidth()
             .background(Theme.paper)
         }
-    }
-
-    private func scoreRow(name: String, turn: ChallengeTurn?, highlight: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                PlayerBadge(name: name, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(name).font(.headline)
-                        if highlight {
-                            Image(systemName: "crown.fill").foregroundStyle(Theme.spark)
-                                .accessibilityLabel("Winner")
-                        }
-                    }
-                    Text(turn.map { "\($0.correctCount) of \($0.answers.count) correct · best streak \($0.bestStreak)" }
-                         ?? "Hasn't played yet")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.muted)
-                }
-                Spacer(minLength: 8)
-                Text(turn.map { $0.points.formatted() } ?? "–")
-                    .font(Theme.display(.title2))
-            }
-            if let turn { AnswerStrip(answers: turn.answers) }
-        }
-        .foregroundStyle(Theme.ink)
-        .accessibilityElement(children: .combine)
     }
 }
 

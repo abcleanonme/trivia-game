@@ -165,11 +165,33 @@ struct FriendsListView: View {
                 }
             }
 
+            let groups = Array(gameCenter.archive.groups.prefix(5))
+            if !groups.isEmpty {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    SectionLabel("Group matches")
+                    DividedCard(groups) { match in
+                        Button { gameCenter.review(match.matchID) } label: {
+                            GroupGameRow(match: match, me: gameCenter.localPlayerID)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows the breakdown and replay")
+                    }
+                }
+            }
+
             let recent = Array(gameCenter.history.games.prefix(8))
             if !recent.isEmpty {
                 VStack(alignment: .leading, spacing: Space.s) {
                     SectionLabel("Recent games")
-                    DividedCard(recent) { GameRow(game: $0, showsOpponent: true) }
+                    DividedCard(recent) { game in
+                        if gameCenter.archive.match(game.matchID) != nil {
+                            Button { gameCenter.review(game.matchID) } label: { GameRow(game: game, showsOpponent: true) }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Shows the breakdown and replay")
+                        } else {
+                            GameRow(game: game, showsOpponent: true)
+                        }
+                    }
                 }
             }
         }
@@ -304,6 +326,44 @@ struct GameRow: View {
     }
 }
 
+/// A finished group match: who played, your place, your score.
+struct GroupGameRow: View {
+    let match: ArchivedMatch
+    let me: String
+
+    var body: some View {
+        let place = match.data.standings(among: match.playerIDs).first { $0.playerID == me }?.place
+        let others = match.playerIDs.filter { $0 != me }
+        HStack(spacing: Space.m) {
+            Text(place.map { "#\($0)" } ?? "–")
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(place == 1 ? Theme.onSpark : .white)
+                .frame(width: 30, height: 26)
+                .background(Capsule().fill(place == 1 ? Theme.spark : Theme.muted))
+                .accessibilityLabel(place.map { "Placed \($0)" } ?? "Didn't play")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You vs \(ChallengeItem.groupName(others.map { match.names[$0] ?? "Player" }))")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(joinedKeepingPhrases([match.data.setup.summary,
+                                           match.finishedAt.formatted(.relative(presentation: .named))]))
+                    .font(.caption)
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: Space.s)
+            Text(match.data.turn(for: me)?.points.formatted() ?? "–")
+                .font(.subheadline.weight(.bold).monospacedDigit())
+            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: Friend detail
 
 /// Everything about you and one friend: record, stats, games in progress,
@@ -344,7 +404,15 @@ struct FriendDetailView: View {
                 } else {
                     VStack(alignment: .leading, spacing: Space.s) {
                         SectionLabel("History")
-                        DividedCard(games) { GameRow(game: $0) }
+                        DividedCard(games) { game in
+                            if gameCenter.archive.match(game.matchID) != nil {
+                                Button { gameCenter.review(game.matchID) } label: { GameRow(game: game) }
+                                    .buttonStyle(.plain)
+                                    .accessibilityHint("Shows the breakdown and replay")
+                            } else {
+                                GameRow(game: game)
+                            }
+                        }
                     }
                 }
             }
@@ -463,6 +531,14 @@ struct ChallengeSetupSheet: View {
                             }
                         }
                         .disabled(gameCenter.nextSetup.mode == .speed)
+                        Toggle(isOn: $gameCenter.nextSetup.allowsInvites) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Players can invite friends").font(.subheadline.weight(.semibold))
+                                Text("Anyone in the match can add more friends, turning it into a group match. Scores so far carry over.")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.muted)
+                            }
+                        }
                     }
                     .padding(Theme.cardPadding)
                     .card()
@@ -477,7 +553,7 @@ struct ChallengeSetupSheet: View {
                     .padding(Theme.cardPadding)
                     .card()
 
-                    Text("Your friend plays the exact same questions under these rules.")
+                    Text("Everyone in the match plays the exact same questions under these rules.")
                         .font(.footnote)
                         .foregroundStyle(Theme.muted)
                 }

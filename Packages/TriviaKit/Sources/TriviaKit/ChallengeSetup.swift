@@ -13,16 +13,36 @@ public struct ChallengeSetup: Codable, Equatable, Hashable, Sendable {
     /// round always has its round clock.
     public var isTimed: Bool
     public var powerUpLimit: Int
+    /// Whether anyone in the match can invite more friends in, turning a
+    /// head-to-head into a group match (or growing a group).
+    public var allowsInvites: Bool
 
     public init(mode: GameMode = .classic, difficulty: Difficulty = .mixed, category: String? = nil,
                 length: Int = GameRules.questionsPerRound, isTimed: Bool = true,
-                powerUpLimit: Int = GameRules.challengePowerUpsPerRound) {
+                powerUpLimit: Int = GameRules.challengePowerUpsPerRound, allowsInvites: Bool = true) {
         self.mode = mode
         self.difficulty = difficulty
         self.category = category
         self.length = length
         self.isTimed = isTimed
         self.powerUpLimit = powerUpLimit
+        self.allowsInvites = allowsInvites
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, difficulty, category, length, isTimed, powerUpLimit, allowsInvites
+    }
+
+    /// Saved setups and history from before invites read as "invites on".
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(mode: try c.decode(GameMode.self, forKey: .mode),
+                  difficulty: try c.decode(Difficulty.self, forKey: .difficulty),
+                  category: try c.decodeIfPresent(String.self, forKey: .category),
+                  length: try c.decode(Int.self, forKey: .length),
+                  isTimed: try c.decode(Bool.self, forKey: .isTimed),
+                  powerUpLimit: try c.decode(Int.self, forKey: .powerUpLimit),
+                  allowsInvites: try c.decodeIfPresent(Bool.self, forKey: .allowsInvites) ?? true)
     }
 
     public static let standard = ChallengeSetup()
@@ -59,6 +79,7 @@ public struct ChallengeSetup: Codable, Equatable, Hashable, Sendable {
         if let category { parts.append(category) }
         if !hasClock { parts.append("No clock") }
         if powerUpLimit == 0 { parts.append("No power-ups") }
+        if !allowsInvites { parts.append("No invites") }
         return parts.joined(separator: " · ")
     }
 

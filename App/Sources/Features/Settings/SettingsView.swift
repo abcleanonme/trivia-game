@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
     @AppStorage(SettingKey.relaxedMode) private var relaxedMode = false
     @AppStorage(SettingKey.animatedBackgrounds) private var animatedBackgrounds = true
+    @AppStorage(SettingKey.liveReplay) private var liveReplay = true
     @State private var confirmingClear = false
 
     var body: some View {
@@ -22,6 +23,11 @@ struct SettingsView: View {
                 Toggle("Animated backgrounds", isOn: $animatedBackgrounds)
             } footer: {
                 Text("Backgrounds also hold still when Reduce Motion or Low Power Mode is on. Change your theme in Profile > Style shop.")
+            }
+            Section {
+                Toggle("Live replay", isOn: $liveReplay)
+            } footer: {
+                Text("Match breakdowns play everyone's answers back as they happened. Turn off to see them all at once.")
             }
             flaggedQuestions
             Section("About") {

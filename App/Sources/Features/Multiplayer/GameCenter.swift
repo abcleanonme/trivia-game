@@ -20,16 +20,40 @@ struct ChallengeItem: Identifiable, Equatable {
     }
 
     let id: String
+    /// The other player in a head-to-head; nil in a group match.
     let opponentID: String?
+    /// The other player's name, or a short list of names for a group.
     let opponentName: String
     var status: Status
     var myPoints: Int?
+    /// The other player's score, or the best other score in a group.
     var theirPoints: Int?
     var updated: Date
     /// The rules, once the challenger has dealt.
     var setup: ChallengeSetup?
+    /// Everyone in the match, you first.
+    var seats: [MatchSeat] = []
+    /// Your place once a group match is finished.
+    var place: Int?
 
     var isFinished: Bool { if case .finished = status { true } else { false } }
+    var isGroup: Bool { seats.count > 2 }
+    var others: [MatchSeat] { seats.filter { !$0.isMe } }
+    /// Who has the turn now, when it isn't you.
+    var upNext: MatchSeat? { others.first { $0.state == .up } }
+    var card: SharedCard? { others.first?.card }
+
+    /// Whether this match includes `friendID`.
+    func includes(_ friendID: String) -> Bool { seats.contains { $0.id == friendID } }
+
+    /// "Maya", or "Maya, Sam & Priya" for a group.
+    static func groupName(_ names: [String]) -> String {
+        switch names.count {
+        case 0: "Someone new"
+        case 1...3: names.formatted(.list(type: .and))
+        default: "\(names.prefix(2).joined(separator: ", ")) & \(names.count - 2) more"
+        }
+    }
 }
 
 /// A challenge round to show full screen: the intro, the round itself, or
@@ -37,10 +61,28 @@ struct ChallengeItem: Identifiable, Equatable {
 struct ChallengeRound: Identifiable {
     let id: String
     var data: ChallengeData
+    /// The other player in a head-to-head; nil in a group match.
     let opponentID: String?
     let opponentName: String
     /// Game Center IDs of everyone still in the match.
     let playerIDs: [String]
+    /// Everyone in the match, you first, with their cards.
+    var seats: [MatchSeat] = []
+    /// Whether the turn is ours now (only then can friends be invited in).
+    var isMyTurn = false
+
+    var isGroup: Bool { seats.count > 2 }
+    var others: [MatchSeat] { seats.filter { !$0.isMe } }
+    func name(of playerID: String) -> String {
+        seats.first { $0.id == playerID }?.name ?? (playerID == opponentID ? opponentName : "Player")
+    }
+    func card(of playerID: String) -> SharedCard? {
+        data.player(playerID)?.card ?? seats.first { $0.id == playerID }?.card
+    }
+    /// Room for more players, and the rules allow it.
+    var canInvite: Bool {
+        data.allowsInvites && seats.count < ChallengeData.maxPlayers
+    }
 }
 
 /// Async "challenge a friend" over Game Center turn-based matches.
@@ -65,6 +107,10 @@ final class GameCenter: NSObject {
     private(set) var challenges: [ChallengeItem] = []
     /// Every finished challenge with both scores, newest first.
     private(set) var history: ChallengeHistory
+    /// Recent finished matches with every answer, for breakdowns and replays.
+    private(set) var archive: MatchArchive
+    /// A finished match's breakdown to show (from history or a lobby row).
+    var reviewing: ArchivedMatch?
     /// Rules for the next challenge you start. Remembered between launches.
     var nextSetup: ChallengeSetup {
         didSet { defaults.setEncoded(nextSetup, forKey: Self.setupKey) }
@@ -96,6 +142,9 @@ final class GameCenter: NSObject {
     /// Players seen in matches or the friends list, for starting a
     /// challenge with someone straight from their page.
     @ObservationIgnored var knownPlayers: [String: GKPlayer] = [:]
+    /// Head-to-heads (and groups) that were turned into a bigger group
+    /// match: old match ID to the new one.
+    @ObservationIgnored var successors: [String: String] = [:]
     /// Debug demo only: sample head-to-head records, so the demo never
     /// writes into the player's real progress.
     private var demoRivals: RivalryBook?
@@ -114,6 +163,7 @@ final class GameCenter: NSObject {
         self.defaults = defaults
         self.isDemo = demo
         history = defaults.decoded(ChallengeHistory.self, forKey: Self.historyKey) ?? ChallengeHistory()
+        archive = MatchArchiveFile.load()
         nextSetup = defaults.decoded(ChallengeSetup.self, forKey: Self.setupKey)?.sanitized() ?? .standard
         pending = defaults.decoded([String: ChallengeTurn].self, forKey: Self.pendingKey, using: .challenge) ?? [:]
         if let legacy = defaults.decoded(LegacyRivalries.self, forKey: Self.legacyRivalriesKey) {
@@ -201,9 +251,22 @@ final class GameCenter: NSObject {
             let loaded = try await GKTurnBasedMatch.loadMatches()
             var items: [ChallengeItem] = []
             var byID: [String: GKTurnBasedMatch] = [:]
+            var loadedData: [String: ChallengeData] = [:]
             for match in loaded {
                 byID[match.matchID] = match
-                let data = await challengeData(of: match)
+                if let data = await challengeData(of: match) {
+                    loadedData[match.matchID] = data
+                    if let old = data.groupFrom { successors[old] = match.matchID }
+                }
+            }
+            for match in loaded {
+                let data = loadedData[match.matchID]
+                // A match that moved into a group match: close it out if
+                // it's ours to close, and leave it off the list.
+                if let next = data?.movedTo ?? successors[match.matchID] {
+                    await closeSuperseded(match, data: data, movedTo: next)
+                    continue
+                }
                 if let item = await item(for: match, data: data) { items.append(item) }
             }
             matches = byID
@@ -222,15 +285,20 @@ final class GameCenter: NSObject {
     private func item(for match: GKTurnBasedMatch, data: ChallengeData?) async -> ChallengeItem? {
         let me = localPlayerID
         let mine = match.participants.first { $0.player?.gamePlayerID == me }
-        let opponent = match.participants.first { $0.player?.gamePlayerID != me }
-        let name = opponent?.player?.displayName ?? "Someone new"
-        if let player = opponent?.player { knownPlayers[player.gamePlayerID] = player }
+        let seats = seats(of: match, data: data)
+        let others = seats.filter { !$0.isMe }
+        let isGroup = match.participants.count > 2
+        // Head-to-head: the other player. Group: nobody in particular.
+        let opponent = isGroup ? nil : match.participants.first { $0.player?.gamePlayerID != me }
+        let name = isGroup ? ChallengeItem.groupName(others.map(\.name))
+            : opponent?.player?.displayName ?? "Someone new"
+        for p in match.participants { if let player = p.player, player.gamePlayerID != me { knownPlayers[player.gamePlayerID] = player } }
         let updated = match.participants.compactMap(\.lastTurnDate).max() ?? match.creationDate
         var item = ChallengeItem(id: match.matchID, opponentID: opponent?.player?.gamePlayerID,
                                  opponentName: name, status: .theirTurn,
                                  myPoints: data?.turn(for: me)?.points,
-                                 theirPoints: opponent?.player.flatMap { data?.turn(for: $0.gamePlayerID)?.points },
-                                 updated: updated, setup: data?.setup)
+                                 theirPoints: others.compactMap(\.points).max(),
+                                 updated: updated, setup: data?.setup, seats: seats)
         if let data, !data.isSupported {
             item.status = .needsUpdate
             return item
@@ -240,7 +308,13 @@ final class GameCenter: NSObject {
         case .ended:
             let outcome = mine.flatMap { Self.outcome(from: $0.matchOutcome) }
             item.status = .finished(outcome)
-            if let outcome, let opponentID = item.opponentID, let data,
+            if let data {
+                let ids = seats.map(\.id)
+                item.place = data.standings(among: ids).first { $0.playerID == me }?.place
+                archiveMatch(match.matchID, data: data, seats: seats, at: updated)
+            }
+            // Head-to-head records only count one-on-one matches.
+            if !isGroup, let outcome, let opponentID = item.opponentID, let data,
                data.isContested(between: me, and: opponentID) {
                 // Both dedupe by match ID, so seeing the match again is a no-op.
                 store.recordMatch(outcome, against: opponentID, name: name,
@@ -249,6 +323,10 @@ final class GameCenter: NSObject {
                                            opponentID: opponentID, opponentName: name,
                                            outcome: outcome, playedAt: updated))
             }
+        case _ where mine?.status == .invited && data?.hasPlayed(me) == true:
+            // Our score carried over from the head-to-head this group grew
+            // out of: nothing to play, just waiting on the others.
+            item.status = .theirTurn
         case _ where mine?.status == .invited:
             item.status = .invited
         case _ where myTurn:
@@ -262,9 +340,9 @@ final class GameCenter: NSObject {
                 }
             }
             item.status = .yourTurn
-        case _ where opponent?.player == nil:
+        case _ where !isGroup && opponent?.player == nil:
             item.status = .findingOpponent
-        case _ where opponent?.status == .declined:
+        case _ where !others.isEmpty && others.allSatisfy({ $0.state == .out }):
             item.status = .declined
         default:
             item.status = .theirTurn
@@ -293,6 +371,11 @@ final class GameCenter: NSObject {
     private func presentMatch(_ match: GKTurnBasedMatch) async throws {
         guard activeRound == nil else { return }
         var match = match
+        // A match that became a group match opens the group instead.
+        if let next = successors[match.matchID] {
+            match = try await GKTurnBasedMatch.load(withID: next)
+            matches[match.matchID] = match
+        }
         let me = localPlayerID
         if match.participants.first(where: { $0.player?.gamePlayerID == me })?.status == .invited {
             match = try await match.acceptInvite()
@@ -310,6 +393,7 @@ final class GameCenter: NSObject {
             // A brand-new match we started: deal now and save straight away,
             // so backing out and coming back can't re-roll the questions.
             data = store.newChallenge(setup ?? nextSetup)
+            data.setPlayer(localPlayerInfo, for: me)
             try await match.saveCurrentTurn(withMatch: data.encoded())
         } else {
             return
@@ -319,12 +403,23 @@ final class GameCenter: NSObject {
             return
         }
         guard activeRound == nil else { return }
-        let opponent = match.participants.first { $0.player?.gamePlayerID != me }
-        activeRound = ChallengeRound(
+        activeRound = round(for: match, data: data)
+    }
+
+    /// The full-screen round for a match.
+    func round(for match: GKTurnBasedMatch, data: ChallengeData) -> ChallengeRound {
+        let me = localPlayerID
+        let seats = seats(of: match, data: data)
+        let isGroup = match.participants.count > 2
+        let opponent = isGroup ? nil : match.participants.first { $0.player?.gamePlayerID != me }
+        return ChallengeRound(
             id: match.matchID, data: data,
             opponentID: opponent?.player?.gamePlayerID,
-            opponentName: opponent?.player?.displayName ?? "your opponent",
-            playerIDs: match.participants.filter { $0.matchOutcome != .quit }.compactMap { $0.player?.gamePlayerID })
+            opponentName: isGroup ? ChallengeItem.groupName(seats.filter { !$0.isMe }.map(\.name))
+                : opponent?.player?.displayName ?? "your opponent",
+            playerIDs: match.participants.filter { $0.matchOutcome != .quit }.compactMap { $0.player?.gamePlayerID },
+            seats: seats,
+            isMyTurn: match.status != .ended && match.currentParticipant?.player?.gamePlayerID == me)
     }
 
     // MARK: Playing
@@ -364,6 +459,7 @@ final class GameCenter: NSObject {
             throw ChallengeError.notYourTurn
         }
         data.record(turn)
+        data.setPlayer(localPlayerInfo, for: me)
         // Store the score on Game Center first, so a dropped connection
         // while passing the turn can't lose it. The lobby finishes the
         // hand-off next time it loads.
@@ -426,7 +522,9 @@ final class GameCenter: NSObject {
             case .didNotPlay: p.matchOutcome = p.status == .declined ? .quit : .timeExpired
             }
         }
-        match.message = "Challenge finished. See who won!"
+        match.message = match.participants.count > 2
+            ? "Group match finished. See the standings!"
+            : "Challenge finished. See who won!"
         try await match.endMatchInTurn(withMatch: data.encoded())
     }
 
@@ -498,7 +596,9 @@ final class GameCenter: NSObject {
         if isDemo { return newDemoChallenge() }
         let request = GKMatchRequest()
         request.minPlayers = 2
-        request.maxPlayers = 2
+        // Pick one friend for a head-to-head, or several for a group match.
+        request.maxPlayers = ChallengeData.maxPlayers
+        request.defaultNumberOfPlayers = max(2, players.count + 1)
         request.inviteMessage = nextSetup.isCustom
             ? "Think you know more than me? Play my Quizio round: \(nextSetup.summary)."
             : "Think you know more than me? Play my Quizio round."
@@ -603,6 +703,197 @@ final class GameCenter: NSObject {
     }
 }
 
+// MARK: Group matches, seats and the archive
+
+extension GameCenter {
+    /// Your card and app build, written into every match you deal or play.
+    var localPlayerInfo: ChallengePlayer {
+        ChallengePlayer(card: SharedCard(store: store, fallbackName: localPlayerName),
+                        build: AppBuild.number, version: AppBuild.version)
+    }
+
+    /// Everyone in a match, you first, then in turn order.
+    func seats(of match: GKTurnBasedMatch, data: ChallengeData?) -> [MatchSeat] {
+        let me = localPlayerID
+        let current = match.currentParticipant?.player?.gamePlayerID
+        var seats: [MatchSeat] = []
+        for p in match.participants {
+            guard let player = p.player else { continue }
+            let id = player.gamePlayerID
+            let isMe = id == me
+            let state: MatchSeat.State
+            if data?.hasPlayed(id) == true {
+                state = .played
+            } else if p.status == .declined || p.matchOutcome == .quit || p.matchOutcome == .timeExpired
+                        || (match.status == .ended) {
+                state = .out
+            } else if id == current {
+                state = .up
+            } else {
+                state = .waiting
+            }
+            let info = data?.player(id)
+            seats.append(MatchSeat(id: id, name: isMe ? "You" : player.displayName, isMe: isMe, state: state,
+                                   points: data?.turn(for: id)?.points,
+                                   card: info?.card ?? (isMe ? localPlayerInfo.card : nil),
+                                   build: info?.build))
+        }
+        return seats.filter(\.isMe) + seats.filter { !$0.isMe }
+    }
+
+    /// Starts a group match with these friends (one friend makes a
+    /// head-to-head) and opens it to deal and play first.
+    func startMatch(with friendIDs: [String]) async {
+        if isDemo { return newDemoChallenge(group: friendIDs) }
+        let players = friendIDs.compactMap { knownPlayers[$0] }
+        guard !players.isEmpty else { return newChallenge() }
+        do {
+            let request = GKMatchRequest()
+            request.minPlayers = players.count + 1
+            request.maxPlayers = players.count + 1
+            request.recipients = players
+            request.inviteMessage = players.count > 1
+                ? "Group match! Play my Quizio round against \(players.count) friends."
+                : "Think you know more than me? Play my Quizio round."
+            let match = try await GKTurnBasedMatch.find(for: request)
+            matches[match.matchID] = match
+            try await show(match)
+            await refresh()
+        } catch {
+            errorMessage = Self.friendly(error, doing: "start that match")
+        }
+    }
+
+    /// Brings more friends into a match by moving it to a new, bigger group
+    /// match with the same questions. Everyone's score so far carries over.
+    /// The old match is closed without counting, by whoever holds its turn.
+    func invite(_ friendIDs: [String], into matchID: String) async {
+        if isDemo { return inviteDemo(friendIDs, into: matchID) }
+        let me = localPlayerID
+        do {
+            let old = try await GKTurnBasedMatch.load(withID: matchID)
+            guard old.status != .ended, let data = await challengeData(of: old, useCache: false) else {
+                throw ChallengeError.matchMissing
+            }
+            guard data.allowsInvites else { throw ChallengeError.invitesOff }
+            let current = old.currentParticipant?.player?.gamePlayerID
+            let stillIn = old.participants.filter { p in
+                p.player != nil && p.player?.gamePlayerID != me
+                    && p.status != .declined && p.matchOutcome == .none
+            }
+            // Whoever hasn't played goes first, starting with whoever holds
+            // the old match's turn, so they see the group before playing the
+            // old one. Players who already played never need a turn.
+            let unplayed = stillIn.filter { !data.hasPlayed($0.player!.gamePlayerID) }
+                .sorted { a, _ in a.player?.gamePlayerID == current }
+            let played = stillIn.filter { data.hasPlayed($0.player!.gamePlayerID) }
+            let existing = Set(stillIn.compactMap { $0.player?.gamePlayerID })
+            let added = friendIDs.filter { !existing.contains($0) && $0 != me }.compactMap { knownPlayers[$0] }
+            guard !added.isEmpty else { return }
+            let recipients = unplayed.compactMap(\.player) + added + played.compactMap(\.player)
+            guard recipients.count + 1 <= ChallengeData.maxPlayers else { throw ChallengeError.groupFull }
+
+            let request = GKMatchRequest()
+            request.minPlayers = recipients.count + 1
+            request.maxPlayers = recipients.count + 1
+            request.recipients = recipients
+            request.inviteMessage = "\(localPlayerName) made this a group match. Join in!"
+            let group = try await GKTurnBasedMatch.find(for: request)
+            matches[group.matchID] = group
+            var copy = data.groupCopy(from: old.matchID)
+            copy.setPlayer(localPlayerInfo, for: me)
+            try await group.saveCurrentTurn(withMatch: copy.encoded())
+            cache[group.matchID] = nil
+            successors[old.matchID] = group.matchID
+
+            // Close the old match now if we can; otherwise the player whose
+            // turn it is closes it when they see the group.
+            if current == me {
+                await closeSuperseded(old, data: data, movedTo: group.matchID)
+            }
+            if copy.hasPlayed(me) {
+                busy.insert(group.matchID)
+                defer { busy.remove(group.matchID) }
+                try await passOrFinish(group, data: copy,
+                                       message: "\(localPlayerName) made this a group match. Your turn!")
+                activeRound = nil
+            } else {
+                activeRound = nil
+                try await show(group)
+            }
+            await refresh()
+        } catch {
+            errorMessage = Self.friendly(error, doing: "invite them")
+        }
+    }
+
+    /// Ends a match that moved into a group match, without anyone winning
+    /// or losing. Only works on our turn; otherwise it waits for whoever
+    /// holds the turn. Finished ones are just cleared from Game Center.
+    func closeSuperseded(_ match: GKTurnBasedMatch, data: ChallengeData?, movedTo next: String) async {
+        let me = localPlayerID
+        if match.status == .ended {
+            try? await match.remove()
+            return
+        }
+        guard match.currentParticipant?.player?.gamePlayerID == me,
+              !busy.contains(match.matchID), var data else { return }
+        busy.insert(match.matchID)
+        defer { busy.remove(match.matchID) }
+        data.movedTo = next
+        for p in match.participants where p.matchOutcome == .none { p.matchOutcome = .tied }
+        match.message = "This match moved into a group match."
+        if (try? await match.endMatchInTurn(withMatch: data.encoded())) != nil {
+            cache[match.matchID] = nil
+            try? await match.remove()
+        }
+    }
+
+    /// Keeps a finished match on this phone for its breakdown and replay.
+    func archiveMatch(_ matchID: String, data: ChallengeData, seats: [MatchSeat], at date: Date) {
+        guard data.movedTo == nil else { return }
+        var names: [String: String] = [:]
+        for seat in seats { names[seat.id] = seat.name }
+        let entry = ArchivedMatch(matchID: matchID, data: data, playerIDs: seats.map(\.id),
+                                  names: names, finishedAt: date)
+        // Keep the first finish time, so re-reading the match doesn't reorder it.
+        if let existing = archive.match(matchID), existing.data == data { return }
+        if archive.add(entry) { MatchArchiveFile.save(archive) }
+    }
+
+    /// Opens the breakdown and replay of a finished match.
+    func review(_ matchID: String) {
+        reviewing = archive.match(matchID)
+    }
+
+    /// Friends who could join a match: Game Center friends and anyone
+    /// you've played, minus who's already in.
+    func invitable(excluding ids: Set<String>) -> [Friend] {
+        friendRows.filter { !ids.contains($0.id) && (knownPlayers[$0.id] != nil || isDemo) }
+    }
+}
+
+/// Where the match archive lives: a JSON file in Application Support (too
+/// big for UserDefaults once it holds dozens of matches).
+enum MatchArchiveFile {
+    private static var url: URL? {
+        try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                     appropriateFor: nil, create: true)
+            .appendingPathComponent("match-archive.v1.json")
+    }
+
+    static func load() -> MatchArchive {
+        guard let url, let data = try? Data(contentsOf: url),
+              let archive = try? JSONDecoder.challenge.decode(MatchArchive.self, from: data) else { return MatchArchive() }
+        return archive
+    }
+
+    static func save(_ archive: MatchArchive) {
+        guard let url, let data = try? JSONEncoder.challenge.encode(archive) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+}
+
 /// The part of the old standalone rivalry file still worth reading.
 private struct LegacyRivalries: Decodable {
     var countedMatchIDs: Set<String> = []
@@ -611,9 +902,13 @@ private struct LegacyRivalries: Decodable {
 enum ChallengeError: LocalizedError {
     case matchMissing
     case notYourTurn
+    case invitesOff
+    case groupFull
     var errorDescription: String? {
         switch self {
         case .matchMissing: "That challenge isn't available any more."
+        case .invitesOff: "This match was set up without invites, so nobody else can join."
+        case .groupFull: "A match can have up to \(ChallengeData.maxPlayers) players."
         case .notYourTurn: "This challenge moved on without you, so your score couldn't be sent. Pull down in Friends to see where it stands."
         }
     }
@@ -693,15 +988,27 @@ private extension GameCenter {
         let now = Date()
         challenges = [
             ChallengeItem(id: "d1", opponentID: "maya", opponentName: "Maya", status: .yourTurn,
-                          myPoints: nil, theirPoints: 1_240, updated: now.addingTimeInterval(-600)),
+                          myPoints: nil, theirPoints: 1_240, updated: now.addingTimeInterval(-600),
+                          seats: demoSeats([("maya", "Maya")])),
+            ChallengeItem(id: "d6", opponentID: nil, opponentName: "Maya, Sam & Priya", status: .yourTurn,
+                          myPoints: nil, theirPoints: 1_310, updated: now.addingTimeInterval(-900),
+                          seats: demoSeats([("maya", "Maya"), ("sam", "Sam"), ("priya", "Priya")])),
             ChallengeItem(id: "d2", opponentID: "sam", opponentName: "Sam", status: .invited,
-                          myPoints: nil, theirPoints: 980, updated: now.addingTimeInterval(-3_600)),
+                          myPoints: nil, theirPoints: 980, updated: now.addingTimeInterval(-3_600),
+                          seats: demoSeats([("sam", "Sam")])),
             ChallengeItem(id: "d3", opponentID: "jordan", opponentName: "Jordan", status: .theirTurn,
-                          myPoints: 1_105, theirPoints: nil, updated: now.addingTimeInterval(-7_200)),
+                          myPoints: 1_105, theirPoints: nil, updated: now.addingTimeInterval(-7_200),
+                          seats: demoSeats([("jordan", "Jordan")]).map { var s = $0; if !s.isMe { s.state = .up }; return s }),
+            ChallengeItem(id: "d7", opponentID: nil, opponentName: "Jordan, Priya, Sam & Maya", status: .finished(.won),
+                          myPoints: 1_420, theirPoints: 1_300, updated: now.addingTimeInterval(-40_000),
+                          seats: demoSeats([("jordan", "Jordan"), ("priya", "Priya"), ("sam", "Sam"), ("maya", "Maya")]),
+                          place: 1),
             ChallengeItem(id: "d4", opponentID: "maya", opponentName: "Maya", status: .finished(.won),
-                          myPoints: 1_360, theirPoints: 1_020, updated: now.addingTimeInterval(-86_400)),
+                          myPoints: 1_360, theirPoints: 1_020, updated: now.addingTimeInterval(-86_400),
+                          seats: demoSeats([("maya", "Maya")])),
             ChallengeItem(id: "d5", opponentID: "sam", opponentName: "Sam", status: .finished(.lost),
-                          myPoints: 870, theirPoints: 1_190, updated: now.addingTimeInterval(-172_800)),
+                          myPoints: 870, theirPoints: 1_190, updated: now.addingTimeInterval(-172_800),
+                          seats: demoSeats([("sam", "Sam")])),
         ]
         var book = RivalryBook()
         for (i, (id, name, outcome)) in [("maya", "Maya", ChallengeOutcome.won), ("maya", "Maya", .won),
@@ -729,22 +1036,85 @@ private extension GameCenter {
     }
 
     func demoRound(for item: ChallengeItem, data: ChallengeData) -> ChallengeRound {
-        ChallengeRound(id: item.id, data: data, opponentID: item.opponentID,
-                       opponentName: item.opponentName, playerIDs: ["me", item.opponentID ?? "them"])
+        let seats = item.seats.map { seat in
+            var s = seat
+            s.points = data.turn(for: seat.id)?.points
+            s.card = data.player(seat.id)?.card ?? seat.card
+            return s
+        }
+        return ChallengeRound(id: item.id, data: data, opponentID: item.opponentID,
+                              opponentName: item.opponentName, playerIDs: seats.map(\.id),
+                              seats: seats, isMyTurn: !data.hasPlayed("me"))
+    }
+
+    /// Sample seats: you plus these friends, with made-up cards.
+    func demoSeats(_ others: [(String, String)]) -> [MatchSeat] {
+        let looks: [[CosmeticSlot: String]] = [
+            [.avatar: "avatar.planet", .border: "border.spark", .cardBackground: "bg.sky"],
+            [.avatar: "avatar.cat", .border: "border.rainbow", .cardBackground: "bg.sunset"],
+            [.avatar: "avatar.bird", .border: "border.ink", .cardBackground: "bg.mint"],
+            [.avatar: "avatar.bolt", .border: "border.coral", .cardBackground: "bg.stripes"],
+            [.avatar: "avatar.star", .border: "border.ink", .cardBackground: "bg.paper"],
+        ]
+        var seats = [MatchSeat(id: "me", name: "You", isMe: true, state: .waiting,
+                               card: localPlayerInfo.card, build: AppBuild.number)]
+        for (i, (id, name)) in others.enumerated() {
+            var items: [String: String] = [:]
+            for (slot, item) in looks[i % looks.count] { items[slot.rawValue] = item }
+            seats.append(MatchSeat(id: id, name: name, isMe: false, state: .played,
+                                   card: SharedCard(name: name, title: "Quiz Whiz", statLabel: "Best streak",
+                                                    statValue: "\(8 + i * 3)", items: items),
+                                   build: AppBuild.number + (id == "sam" ? 1 : 0)))
+        }
+        return seats
+    }
+
+    /// A made-up turn with picks, so breakdowns and replays have something to show.
+    func demoTurn(_ id: String, data: ChallengeData, skill: Int, points: Int? = nil) -> ChallengeTurn {
+        var picks: [ChallengePick] = []
+        var total = 0
+        for (i, q) in data.questions.prefix(10).enumerated() {
+            let hash = abs((id + q.prompt).hashValue)
+            let correct = (hash + i) % 10 < skill
+            let wrong = q.choices.indices.first { $0 != q.correctIndex } ?? 0
+            let seconds = 2 + Double(hash % 120) / 10
+            let p = correct ? 100 + Int(GameRules.questionTime - seconds) * 5 : 0
+            total += p
+            picks.append(ChallengePick(questionID: q.id, choice: correct ? q.correctIndex : wrong,
+                                       seconds: seconds, correct: correct, points: p))
+        }
+        return ChallengeTurn(playerID: id, points: points ?? total, correctCount: picks.filter(\.correct).count,
+                             bestStreak: 3, answers: picks.map(\.correct), picks: picks)
     }
 
     func openDemo(_ item: ChallengeItem) {
         var data = store.newChallenge()
-        let them = item.opponentID ?? "them"
-        if let points = item.theirPoints {
-            data.record(ChallengeTurn(playerID: them, points: points, correctCount: points / 140,
-                                      bestStreak: 3, answers: (0..<10).map { $0 < points / 140 }))
+        for (i, seat) in item.seats.enumerated() {
+            if let card = seat.card { data.setPlayer(ChallengePlayer(card: card, build: seat.build ?? 0), for: seat.id) }
+            let points = seat.isMe ? item.myPoints : seat.points
+            if seat.state == .played || (seat.isMe && points != nil) {
+                data.record(demoTurn(seat.id, data: data, skill: seat.isMe ? 7 : 5 + i, points: points))
+            }
         }
-        if let points = item.myPoints {
-            data.record(ChallengeTurn(playerID: "me", points: points, correctCount: points / 140,
-                                      bestStreak: 4, answers: (0..<10).map { $0 % 4 != 3 }))
+        if item.isFinished {
+            let seats = item.seats
+            archiveMatch(item.id, data: data, seats: seats, at: item.updated)
+            reviewing = archive.match(item.id)
+            return
         }
         activeRound = demoRound(for: item, data: data)
+    }
+
+    func inviteDemo(_ friendIDs: [String], into matchID: String) {
+        guard let i = challenges.firstIndex(where: { $0.id == matchID }) else { return }
+        let names = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0.name) })
+        let extra = demoSeats(friendIDs.map { ($0, names[$0] ?? "Friend") }).dropFirst().map { seat in
+            var s = seat
+            s.state = .waiting
+            return s
+        }
+        challenges[i].seats += extra
+        activeRound?.seats += extra
     }
 
     func submitDemo(_ turn: ChallengeTurn, in round: ChallengeRound) -> ChallengeData {
@@ -763,14 +1133,23 @@ private extension GameCenter {
         guard let old = challenges.first(where: { $0.id == matchID }) else { return }
         let item = ChallengeItem(id: UUID().uuidString, opponentID: old.opponentID,
                                  opponentName: old.opponentName, status: .yourTurn,
-                                 myPoints: nil, theirPoints: nil, updated: Date())
+                                 myPoints: nil, theirPoints: nil, updated: Date(),
+                                 seats: old.seats.map { var s = $0; s.state = s.isMe ? .up : .waiting; s.points = nil; return s })
         challenges.insert(item, at: 0)
         openDemo(item)
     }
 
-    func newDemoChallenge() {
-        let item = ChallengeItem(id: UUID().uuidString, opponentID: "riley", opponentName: "Riley",
-                                 status: .yourTurn, myPoints: nil, theirPoints: nil, updated: Date())
+    func newDemoChallenge(group: [String] = []) {
+        let names = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0.name) })
+        let people = group.isEmpty ? [("riley", "Riley")] : group.map { ($0, names[$0] ?? "Friend") }
+        let seats = demoSeats(people).map { seat in
+            var s = seat
+            s.state = s.isMe ? .up : .waiting
+            return s
+        }
+        let item = ChallengeItem(id: UUID().uuidString, opponentID: people.count == 1 ? people[0].0 : nil,
+                                 opponentName: ChallengeItem.groupName(people.map(\.1)),
+                                 status: .yourTurn, myPoints: nil, theirPoints: nil, updated: Date(), seats: seats)
         challenges.insert(item, at: 0)
         openDemo(item)
     }

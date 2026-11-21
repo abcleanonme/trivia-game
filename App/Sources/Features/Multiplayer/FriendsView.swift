@@ -17,6 +17,7 @@ struct FriendsView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @SceneStorage("friends.section") private var section: Section = .play
     @State private var editingRules = false
+    @State private var pickingGroup = false
 
     var body: some View {
         ScrollView {
@@ -71,7 +72,17 @@ struct FriendsView: View {
             await gameCenter.loadFriends()
         }
         .sheet(isPresented: $editingRules) {
-            ChallengeSetupSheet(startTitle: "Pick a friend") { gameCenter.newChallenge() }
+            ChallengeSetupSheet(startTitle: "Pick friends") { gameCenter.newChallenge() }
+        }
+        .sheet(isPresented: $pickingGroup) {
+            FriendPickerSheet(
+                title: "Group match",
+                note: "Everyone plays the same questions under your rules (\(gameCenter.nextSetup.summary)). Highest score wins.",
+                limit: ChallengeData.maxPlayers - 1,
+                startTitle: { n in n == 1 ? "Challenge 1 friend" : "Start a squad of \(n + 1)" }
+            ) { ids in
+                Task { await gameCenter.startMatch(with: ids) }
+            }
         }
         .alert("Something went wrong",
                isPresented: Binding(get: { gameCenter.errorMessage != nil },
@@ -97,10 +108,10 @@ struct FriendsView: View {
                     Text("Take turns")
                         .eyebrow()
                         .opacity(0.9)
-                    Text("Challenge a friend.")
+                    Text("Challenge friends.")
                         .font(Theme.display(.title2))
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("You play first, they play the same questions when they like. Highest score wins.")
+                    Text("One friend or a whole group. You play first, they play the same questions when they like. Highest score wins.")
                         .font(.footnote)
                         .opacity(0.92)
                         .fixedSize(horizontal: false, vertical: true)
@@ -116,6 +127,13 @@ struct FriendsView: View {
                 .accessibilityLabel("New challenge")
                 .accessibilityHint(setup.summary)
             }
+            Button { pickingGroup = true } label: {
+                Label("Group match", systemImage: "person.3.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+            }
+            .buttonStyle(.chunky(fill: .white, foreground: Theme.ink, capsule: true))
+            .accessibilityHint("Pick up to \(ChallengeData.maxPlayers - 1) friends to play the same round")
             // The rules the next challenge uses, one tap to change.
             Button { editingRules = true } label: {
                 HStack(spacing: Space.s) {
@@ -248,6 +266,7 @@ private struct ChallengeRow: View {
     @Environment(GameCenter.self) private var gameCenter
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var confirmingRemove = false
+    @State private var inviting = false
 
     var body: some View {
         let layout = typeSize.isAccessibilitySize
@@ -271,7 +290,26 @@ private struct ChallengeRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
         .contextMenu {
+            if canInvite {
+                Button(item.isGroup ? "Invite more friends" : "Make it a group match", systemImage: "person.badge.plus") {
+                    inviting = true
+                }
+            }
+            if item.isFinished, gameCenter.archive.match(item.id) != nil {
+                Button("Match breakdown", systemImage: "list.bullet.rectangle") { gameCenter.review(item.id) }
+            }
             Button(removeTitle, systemImage: "xmark.circle", role: .destructive) { confirmingRemove = true }
+        }
+        .sheet(isPresented: $inviting) {
+            FriendPickerSheet(
+                title: "Invite to this match",
+                note: "They play the same questions. Everyone's score so far carries over.",
+                excluded: Set(item.seats.map(\.id)),
+                limit: ChallengeData.maxPlayers - item.seats.count,
+                startTitle: { n in n == 1 ? "Invite 1 friend" : "Invite \(n) friends" }
+            ) { ids in
+                Task { await gameCenter.invite(ids, into: item.id) }
+            }
         }
         .confirmationDialog(removeTitle + "?", isPresented: $confirmingRemove, titleVisibility: .visible) {
             Button(removeTitle, role: .destructive) { Task { await gameCenter.remove(item) } }
@@ -280,13 +318,30 @@ private struct ChallengeRow: View {
         }
     }
 
+    private var canInvite: Bool {
+        !item.isFinished && item.status != .needsUpdate && item.status != .declined
+            && item.setup?.allowsInvites != false && item.seats.count < ChallengeData.maxPlayers
+    }
+
+    @ViewBuilder private var avatar: some View {
+        if item.isGroup {
+            AvatarStack(seats: item.others, size: 30, limit: 3)
+        } else {
+            PlayerAvatar(name: item.opponentName, card: item.card, size: 44)
+        }
+    }
+
     private var info: some View {
         HStack(spacing: 12) {
-            PlayerBadge(name: item.opponentName)
+            avatar
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
+                    if item.isGroup {
+                        Image(systemName: "person.3.fill").font(.caption.bold()).foregroundStyle(Theme.accent)
+                            .accessibilityLabel("Group match")
+                    }
                     Text(item.opponentName).font(.headline).lineLimit(1)
-                    if let record, record.played > 0 { RecordChip(record: record) }
+                    if let record, record.played > 0, !item.isGroup { RecordChip(record: record) }
                 }
                 Text(subtitle)
                     .font(.footnote)
@@ -306,6 +361,7 @@ private struct ChallengeRow: View {
 
     private var subtitle: String {
         let ago = item.updated.formatted(.relative(presentation: .named))
+        if item.isGroup { return groupSubtitle(ago: ago) }
         switch item.status {
         case .invited:
             return item.theirPoints.map { "Challenged you · scored \($0.formatted())" } ?? "Challenged you"
@@ -334,6 +390,24 @@ private struct ChallengeRow: View {
         }
     }
 
+    private func groupSubtitle(ago: String) -> String {
+        let played = item.others.filter { $0.state == .played }.count
+        switch item.status {
+        case .invited: return "Invited you · \(played) of \(item.others.count) played"
+        case .yourTurn:
+            return item.theirPoints.map { "Your turn · top score \($0.formatted())" } ?? "Your turn to play"
+        case .theirTurn:
+            if let up = item.upNext { return "\(up.name) is up · \(played + (item.myPoints == nil ? 0 : 1)) of \(item.seats.count) played" }
+            return "Waiting on the group · \(ago)"
+        case .findingOpponent: return "Filling seats…"
+        case .declined: return "Everyone passed"
+        case .needsUpdate: return "Update Quizio to play this one"
+        case .finished:
+            guard item.myPoints != nil, let place = item.place else { return "You didn't play · \(ago)" }
+            return place == 1 ? "You won · \((item.myPoints ?? 0).formatted()) pts" : "You placed #\(place) of \(item.seats.count) · \((item.myPoints ?? 0).formatted()) pts"
+        }
+    }
+
     @ViewBuilder private var action: some View {
         switch item.status {
         case .invited, .yourTurn:
@@ -342,7 +416,7 @@ private struct ChallengeRow: View {
             }
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
             .fixedSize()
-            .accessibilityHint("Plays your turn against \(item.opponentName)")
+            .accessibilityHint(item.isGroup ? "Plays your turn in the group match" : "Plays your turn against \(item.opponentName)")
         case .finished(let outcome) where outcome != nil:
             Button { Task { await gameCenter.rematch(item.id) } } label: {
                 Text("Rematch").font(.headline).lineLimit(1).padding(.horizontal, 16).frame(minHeight: 44)
@@ -364,7 +438,10 @@ private struct ChallengeRow: View {
     }
 
     private var removeMessage: String {
-        switch item.status {
+        if item.isGroup, [.yourTurn, .theirTurn, .findingOpponent].contains(item.status) {
+            return "You'll be out of this group match."
+        }
+        return switch item.status {
         case .invited: "\(item.opponentName) will see that you passed."
         case .yourTurn, .theirTurn, .findingOpponent: "This counts as a loss against \(item.opponentName)."
         default: "Clears it from your list. Your head-to-head record stays."
