@@ -92,7 +92,7 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         let rewards = p.record(s, kind: .daily(day), finished: false)
         #expect(rewards.dailyBonus == 0)
         #expect(p.streak.count == 0)
-        #expect(p.hasPlayedDaily(on: day))
+        #expect(p.dailies[day] != nil)
     }
 
     @Test func fastMarks() {
@@ -238,7 +238,7 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         let bank = QuestionBank(questions: (0..<60).map {
             question($0, category: ["Science", "Art", "Music"][$0 % 3], difficulty: $0 % 2 == 0 ? "hard" : "easy")
         })
-        var rng = SeededRNG(state: 7)
+        var rng = SplitMix64(seed: 7)
         let round = bank.dealRound(difficulty: "hard", using: &rng)
         #expect(round.questions.count == 10)
         #expect(round.questions.allSatisfy { $0.difficulty == "hard" })
@@ -363,14 +363,46 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
 @Suite struct RivalryTests {
     @Test func recordsAndStamps() {
         var p = PlayerProgress()
-        let first = p.recordMatch(.win, against: "g:1", name: "Sam")
+        let first = p.recordMatch(.won, against: "g:1", name: "Sam")
         #expect(first == [.firstRivalWin])
-        _ = p.recordMatch(.loss, against: "g:1", name: "Sam")
-        _ = p.recordMatch(.tie, against: "g:1", name: "Sam")
+        p.recordMatch(.lost, against: "g:1", name: "Sam")
+        p.recordMatch(.tied, against: "g:1", name: "Sam")
         #expect(p.rivals.record(for: "g:1")?.summary == "1–1–1")
         var stamps: [Stamp] = []
-        for _ in 0..<9 { stamps += p.recordMatch(.win, against: "g:1", name: "Sam") }
+        for _ in 0..<9 { stamps += p.recordMatch(.won, against: "g:1", name: "Sam") ?? [] }
         #expect(stamps == [.bigRivalry])
+    }
+
+    @Test func countsEachMatchOnce() {
+        var p = PlayerProgress()
+        #expect(p.recordMatch(.won, against: "alex", name: "Alex", matchID: "m1") == [.firstRivalWin])
+        #expect(p.recordMatch(.won, against: "alex", name: "Alex", matchID: "m1") == nil)
+        #expect(p.rivals.record(for: "alex")?.wins == 1)
+        #expect(p.rivals.hasCounted(matchID: "m1"))
+        p.rivals.markCounted(["m2"])
+        #expect(p.recordMatch(.lost, against: "alex", name: "Alex", matchID: "m2") == nil)
+        #expect(p.rivals.record(for: "alex")?.played == 1)
+    }
+
+    @Test func keepsLatestNameAndSortsMostRecentFirst() {
+        var book = RivalryBook()
+        book.add(.won, against: "old", name: "Old", at: Date(timeIntervalSince1970: 100))
+        book.add(.lost, against: "new", name: "New", at: Date(timeIntervalSince1970: 200))
+        book.add(.tied, against: "new", name: "New G", at: Date(timeIntervalSince1970: 150))
+        #expect(book.sorted.map(\.id) == ["new", "old"])
+        #expect(book.record(for: "new")?.name == "New G")
+        #expect(book.record(for: "new")?.lastPlayed == Date(timeIntervalSince1970: 200))
+    }
+
+    @Test func survivesSavingAndReadsOlderSaves() throws {
+        var book = RivalryBook()
+        book.add(.won, against: "alex", name: "Alex", matchID: "m1")
+        var decoded = try JSONDecoder().decode(RivalryBook.self, from: JSONEncoder().encode(book))
+        #expect(decoded == book)
+        #expect(decoded.add(.won, against: "alex", name: "Alex", matchID: "m1") == nil)
+        // Saves from before match IDs were tracked here.
+        let old = Data(#"{"records":{"sam":{"id":"sam","name":"Sam","wins":2,"losses":1,"ties":0}}}"#.utf8)
+        #expect(try JSONDecoder().decode(RivalryBook.self, from: old).record(for: "sam")?.summary == "2–1")
     }
 }
 
@@ -392,7 +424,7 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
 
     @Test(arguments: Difficulty.allCases)
     func everyDifficultyDealsAFullRound(difficulty: Difficulty) {
-        var rng = SeededRNG(state: 1)
+        var rng = SplitMix64(seed: 1)
         let round = Self.bank.dealRound(difficulty: difficulty.tag, using: &rng)
         #expect(round.questions.count == 10)
         if let tag = difficulty.tag { #expect(round.questions.allSatisfy { $0.difficulty == tag }) }

@@ -7,19 +7,23 @@ import Foundation
 /// Bundled for now; a backend can serve updates later.
 public struct QuestionBank: Sendable {
     public let questions: [Question]
+    /// Every category in the bank, in Home's order. Worked out once, since
+    /// screens read it on every redraw.
+    public let categories: [String]
 
     public init(questions: [Question]) {
         self.questions = questions
+        self.categories = Self.orderedCategories(in: questions)
     }
 
     public init(jsonData: Data) throws {
-        self.questions = try JSONDecoder().decode([Question].self, from: jsonData)
+        self.init(questions: try JSONDecoder().decode([Question].self, from: jsonData))
     }
 
     /// Combines banks, dropping repeated prompts.
     public init(merging banks: [QuestionBank]) {
         var seen = Set<String>()
-        self.questions = banks.flatMap(\.questions).filter { seen.insert($0.prompt.lowercased()).inserted }
+        self.init(questions: banks.flatMap(\.questions).filter { seen.insert($0.prompt.lowercased()).inserted })
     }
 
     /// The order categories appear on Home. Anything else follows, A to Z.
@@ -28,9 +32,9 @@ public struct QuestionBank: Sendable {
         "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture", "Anime",
     ]
 
-    public var categories: [String] {
+    private static func orderedCategories(in questions: [Question]) -> [String] {
         let present = Set(questions.map(\.category))
-        let preferred = Self.preferredCategoryOrder.filter(present.contains)
+        let preferred = preferredCategoryOrder.filter(present.contains)
         return preferred + present.subtracting(preferred).sorted()
     }
 

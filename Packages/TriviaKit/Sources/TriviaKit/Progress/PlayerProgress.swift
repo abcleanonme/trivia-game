@@ -80,8 +80,6 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         [Stamp.defaultTitle] + stamps.compactMap(\.title).sorted()
     }
 
-    public func hasPlayedDaily(on day: Day) -> Bool { dailies[day] != nil }
-
     public func eventProgress(_ event: WeeklyEvent, week: Int) -> EventProgress {
         events[WeeklyEvent.instanceID(event, week: week)] ?? EventProgress()
     }
@@ -196,13 +194,16 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         return rewards
     }
 
-    /// Records a friend match (called by the multiplayer layer).
-    public mutating func recordMatch(_ outcome: MatchOutcome, against friendID: String, name: String,
-                                     at date: Date = Date()) -> [Stamp] {
-        var rewards = RoundRewards()
-        for stamp in rivals.add(outcome, against: friendID, name: name, at: date) {
-            earn(stamp, into: &rewards)
+    /// Records a friend match (called by the multiplayer layer). Returns
+    /// the stamps it earned, or nil if `matchID` was already counted.
+    @discardableResult
+    public mutating func recordMatch(_ outcome: ChallengeOutcome, against friendID: String, name: String,
+                                     matchID: String? = nil, at date: Date = Date()) -> [Stamp]? {
+        guard let earned = rivals.add(outcome, against: friendID, name: name, matchID: matchID, at: date) else {
+            return nil
         }
+        var rewards = RoundRewards()
+        for stamp in earned { earn(stamp, into: &rewards) }
         if rivals.totalWins >= 50 { earn(.fiftyWins, into: &rewards) }
         return rewards.newStamps
     }

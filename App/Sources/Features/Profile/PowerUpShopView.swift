@@ -8,6 +8,7 @@ struct PowerUpShopView: View {
     @Environment(PlayerStore.self) private var store
     /// Bumped on each purchase for the success haptic.
     @State private var bought = 0
+    @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
 
     var body: some View {
         ScrollView {
@@ -37,13 +38,12 @@ struct PowerUpShopView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
-        .background(Theme.paper)
+        .themeBackground()
         .navigationTitle("Power-up shop")
         .navigationBarTitleDisplayMode(.inline)
-        .sensoryFeedback(.success, trigger: bought)
+        .sensoryFeedback(.success, trigger: bought) { _, _ in hapticsEnabled }
     }
 
     private var kitCard: some View {

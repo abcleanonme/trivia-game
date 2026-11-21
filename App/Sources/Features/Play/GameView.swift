@@ -53,7 +53,9 @@ struct GameView: View {
         .onChange(of: session?.phase == .finished) { _, finished in
             if finished, let session { rewards = store.finish(session, for: current) }
         }
-        .task { await runClock() }
+        .task {
+            await runRoundClock(isActive: { scenePhase == .active }, tick: { session?.tick(by: $0) })
+        }
     }
 
     private func summary(_ session: GameSession) -> SummaryView {
@@ -121,23 +123,6 @@ struct GameView: View {
     private func usePowerUp(_ powerUp: PowerUp) {
         guard var s = session else { return }
         if store.use(powerUp, in: &s) { session = s }
-    }
-
-    /// Ticks the round clock about ten times a second using real elapsed
-    /// time, and pauses while the app isn't active so nobody loses a
-    /// question to a phone call.
-    private func runClock() async {
-        let clock = ContinuousClock()
-        var last = clock.now
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(100))
-            let now = clock.now
-            let elapsed = now - last
-            last = now
-            guard scenePhase == .active else { continue }
-            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-            session?.tick(by: seconds)
-        }
     }
 }
 

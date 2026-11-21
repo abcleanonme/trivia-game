@@ -202,11 +202,13 @@ private func game(_ id: String, vs opponent: String = "alex", _ outcome: Challen
         var p = PlayerProgress()
         p.stats.correctAnswers = 321
         p.stats.bestSurvival = 17
+        p.recordMatch(.won, against: "sam", name: "Sam")
+        p.recordMatch(.won, against: "alex", name: "Alex")
         let today = Day(year: 2026, month: 11, day: 14)
-        #expect(FriendBoard.correct.value(progress: p, today: today, challengeWins: 0) == 321)
-        #expect(FriendBoard.survival.value(progress: p, today: today, challengeWins: 0) == 17)
-        #expect(FriendBoard.challengeWins.value(progress: p, today: today, challengeWins: 4) == 4)
-        #expect(FriendBoard.daily.value(progress: p, today: today, challengeWins: 4) == nil)
+        #expect(FriendBoard.correct.value(progress: p, today: today) == 321)
+        #expect(FriendBoard.survival.value(progress: p, today: today) == 17)
+        #expect(FriendBoard.challengeWins.value(progress: p, today: today) == 2)
+        #expect(FriendBoard.daily.value(progress: p, today: today) == nil)
     }
 
     @Test func formatsUnits() {

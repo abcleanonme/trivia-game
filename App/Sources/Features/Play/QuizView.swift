@@ -21,7 +21,7 @@ struct QuizView: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
     @State private var confirmingQuit = false
     @State private var reporting: Question?
     @State private var reported: Set<UUID> = []
@@ -83,8 +83,7 @@ struct QuizView: View {
                     .padding(.horizontal, Theme.gutter)
                     .padding(.top, 8)
                     .padding(.bottom, 16)
-                    .frame(maxWidth: 760)
-                    .frame(maxWidth: .infinity)
+                    .readableWidth(760)
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .onChange(of: lastResult == nil) { _, waiting in
@@ -105,8 +104,7 @@ struct QuizView: View {
                         .padding(.horizontal, Theme.gutter)
                         .padding(.top, 8)
                         .padding(.bottom, 10)
-                        .frame(maxWidth: 760)
-                        .frame(maxWidth: .infinity)
+                        .readableWidth(760)
                         .background(Theme.paper)
                 }
             }
@@ -137,7 +135,7 @@ struct QuizView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("Reports go to the people who review questions. Thanks for keeping the bank honest.")
+                Text("Flagged questions are kept on this phone. Send them from Settings so they get fixed.")
             }
         }
     }

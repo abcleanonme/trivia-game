@@ -1,4 +1,5 @@
 import SwiftUI
+import TriviaKit
 
 /// Shared animation vocabulary. Every effect here checks Reduce Motion
 /// itself, so call sites never have to: movement (slides, shakes, bursts,
@@ -121,7 +122,8 @@ struct ConfettiBurst: View {
 
     private static let duration: Double = 1.6
     private static let particles: [Particle] = {
-        var rng = SeededRandom(seed: 7)
+        // Seeded so the confetti looks the same every time.
+        var rng = SplitMix64(seed: 7)
         return (0..<70).map { i in Particle(rng: &rng, fromLeft: i.isMultiple(of: 2)) }
     }()
 
@@ -132,8 +134,10 @@ struct ConfettiBurst: View {
                 let t = timeline.date.timeIntervalSince(startedAt)
                 guard t >= 0, t < Self.duration else { return }
                 let count = Int(Double(Self.particles.count) * min(max(intensity, 0.3), 1))
+                // Read per burst, so confetti follows the current theme's accent.
+                let colors = Particle.colors
                 for p in Self.particles.prefix(count) {
-                    p.draw(in: &ctx, size: size, t: t, life: Self.duration)
+                    p.draw(in: &ctx, size: size, t: t, life: Self.duration, colors: colors)
                 }
             }
         }
@@ -156,21 +160,24 @@ struct ConfettiBurst: View {
         let speed: Double      // fraction of screen height per second
         let spin: Double
         let size: CGSize
-        let color: Color
+        let colorIndex: Int
         let circle: Bool
 
-        init(rng: inout SeededRandom, fromLeft: Bool) {
-            self.fromLeft = fromLeft
-            angle = rng.next(in: 0.15...0.75)
-            speed = rng.next(in: 0.9...1.55)
-            spin = rng.next(in: -9...9)
-            size = CGSize(width: rng.next(in: 6...10), height: rng.next(in: 9...15))
-            let palette = [Theme.accent, Theme.spark, Theme.correct, Theme.wrong, Color(light: 0xE04F9F, dark: 0xF06BB3)]
-            color = palette[Int(rng.next(in: 0..<Double(palette.count)))]
-            circle = rng.next(in: 0...1) < 0.25
+        static var colors: [Color] {
+            [Theme.accent, Theme.spark, Theme.correct, Theme.wrong, Color(light: 0xE04F9F, dark: 0xF06BB3)]
         }
 
-        func draw(in ctx: inout GraphicsContext, size canvas: CGSize, t: Double, life: Double) {
+        init(rng: inout SplitMix64, fromLeft: Bool) {
+            self.fromLeft = fromLeft
+            angle = Double.random(in: 0.15...0.75, using: &rng)
+            speed = Double.random(in: 0.9...1.55, using: &rng)
+            spin = Double.random(in: -9...9, using: &rng)
+            size = CGSize(width: Double.random(in: 6...10, using: &rng), height: Double.random(in: 9...15, using: &rng))
+            colorIndex = Int.random(in: 0..<5, using: &rng)
+            circle = Double.random(in: 0...1, using: &rng) < 0.25
+        }
+
+        func draw(in ctx: inout GraphicsContext, size canvas: CGSize, t: Double, life: Double, colors: [Color]) {
             let h = canvas.height
             let gravity = 1.9 * h
             let dir: Double = fromLeft ? 1 : -1
@@ -190,30 +197,8 @@ struct ConfettiBurst: View {
             let rect = CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height)
             let shape = circle ? Path(ellipseIn: rect.insetBy(dx: 0, dy: (size.height - size.width) / 2))
                                : Path(roundedRect: rect, cornerRadius: 2)
-            c.fill(shape, with: .color(color))
+            c.fill(shape, with: .color(colors[colorIndex % colors.count]))
         }
-    }
-}
-
-/// Small deterministic generator so the confetti looks the same every time
-/// and costs nothing to set up.
-struct SeededRandom {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed &* 0x9E37_79B9_7F4A_7C15 | 1 }
-
-    mutating func nextUInt() -> UInt64 {
-        state ^= state << 13
-        state ^= state >> 7
-        state ^= state << 17
-        return state
-    }
-
-    mutating func next(in range: ClosedRange<Double>) -> Double {
-        range.lowerBound + Double(nextUInt() % 10_000) / 10_000 * (range.upperBound - range.lowerBound)
-    }
-
-    mutating func next(in range: Range<Double>) -> Double {
-        range.lowerBound + Double(nextUInt() % 10_000) / 10_001 * (range.upperBound - range.lowerBound)
     }
 }
 

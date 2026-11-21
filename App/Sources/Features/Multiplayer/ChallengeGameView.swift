@@ -39,6 +39,7 @@ struct ChallengeGameView: View {
                          onPowerUp: usePowerUp,
                          onNext: { update { $0.advance() } },
                          onQuit: { send(session) },
+                         onReport: { q, reason in store.report(q, reason: reason) },
                          quitMessage: "Your score so far is sent to \(round.opponentName). Questions you didn't reach count as wrong.")
             case .sending:
                 ProgressView("Sending your score…")
@@ -63,7 +64,7 @@ struct ChallengeGameView: View {
                                     onDone: { dismiss() })
             }
         }
-        .background(Theme.paper.ignoresSafeArea())
+        .themeBackground()
         .onAppear {
             // Opening a match we've already played goes straight to the
             // result; one played offline goes straight to sending it.
@@ -75,7 +76,9 @@ struct ChallengeGameView: View {
                 send(round.data.makeSession())
             }
         }
-        .task { await runClock() }
+        .task {
+            await runRoundClock(isActive: { scenePhase == .active }, tick: { s in update { $0.tick(by: s) } })
+        }
         .interactiveDismissDisabled()
     }
 
@@ -105,12 +108,11 @@ struct ChallengeGameView: View {
             do {
                 stage = .result(try await gameCenter.submit(session, in: round))
             } catch {
-                if case ChallengeError.notYourTurn = error {
-                    stage = .failed(session, GameCenter.friendly(error, doing: "send your score"))
-                } else {
-                    stage = .failed(session, GameCenter.friendly(error, doing: "send your score")
-                                    + " Your score is saved on this phone and sends by itself next time you open Friends.")
+                var message = GameCenter.friendly(error, doing: "send your score")
+                if case ChallengeError.notYourTurn = error {} else {
+                    message += " Your score is saved on this phone and sends by itself next time you open Friends."
                 }
+                stage = .failed(session, message)
             }
         }
     }
@@ -121,21 +123,6 @@ struct ChallengeGameView: View {
             // Let this cover finish closing before the next one opens.
             try? await Task.sleep(for: .milliseconds(450))
             await gameCenter.rematch(round.id)
-        }
-    }
-
-    /// Same clock as solo rounds: real elapsed time, paused in the background.
-    private func runClock() async {
-        let clock = ContinuousClock()
-        var last = clock.now
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(100))
-            let now = clock.now
-            let elapsed = now - last
-            last = now
-            guard scenePhase == .active else { continue }
-            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-            update { $0.tick(by: seconds) }
         }
     }
 }
@@ -192,8 +179,7 @@ private struct ChallengeIntroView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.xl)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
@@ -215,8 +201,7 @@ private struct ChallengeIntroView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, 12)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
             .background(Theme.paper)
         }
     }
@@ -326,8 +311,7 @@ private struct ChallengeResultView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.xl)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
@@ -346,8 +330,7 @@ private struct ChallengeResultView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, 12)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
             .background(Theme.paper)
         }
     }

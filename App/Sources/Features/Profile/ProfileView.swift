@@ -1,8 +1,8 @@
 import SwiftUI
 import TriviaKit
 
-/// You: Player Card, Daily streak, category mastery, stamps, friends, and
-/// the questions you've written.
+/// You: Player Card, Daily streak, records, category mastery, stamps and
+/// head-to-head records with friends.
 struct ProfileView: View {
     @Environment(PlayerStore.self) private var store
 
@@ -66,16 +66,11 @@ struct ProfileView: View {
                 section("Category mastery") {
                     // One card with hairlines between rows reads as a list
                     // instead of fourteen loose blocks.
-                    VStack(spacing: 0) {
-                        ForEach(Array(store.bank.categories.enumerated()), id: \.element) { i, category in
-                            if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                            MasteryRow(category: category)
-                                .padding(.top, Space.s)
-            .padding(.bottom, Space.m)
-                        }
+                    DividedCard(store.bank.categories, id: \.self, verticalPadding: 0) { category in
+                        MasteryRow(category: category)
+                            .padding(.top, Space.s)
+                            .padding(.bottom, Space.m)
                     }
-                    .padding(.horizontal, Theme.cardPadding)
-                    .card()
                 }
 
                 section("Stamps") {
@@ -99,33 +94,27 @@ struct ProfileView: View {
                 }
 
                 section("Friends") {
-                    if p.rivals.sorted.isEmpty {
+                    if p.rivals.records.isEmpty {
                         Text("Play a friend and your head-to-head record shows up here.")
                             .font(.subheadline)
                             .foregroundStyle(Theme.muted)
                     } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(p.rivals.sorted.enumerated()), id: \.element.id) { i, r in
-                                if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                                HStack {
-                                    Text(r.name).font(.headline).foregroundStyle(Theme.ink)
-                                    Spacer()
-                                    RivalryBadge(record: r)
-                                }
-                                .frame(minHeight: 44)
-                                .padding(.vertical, Space.xs)
+                        DividedCard(p.rivals.sorted, verticalPadding: 0) { r in
+                            HStack {
+                                Text(r.name).font(.headline).foregroundStyle(Theme.ink)
+                                Spacer()
+                                RecordChip(record: r)
                             }
+                            .frame(minHeight: 44)
+                            .padding(.vertical, Space.xs)
                         }
-                        .padding(.horizontal, Theme.cardPadding)
-                        .card()
                     }
                 }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.s)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .themeBackground()
         .navigationTitle("Profile")

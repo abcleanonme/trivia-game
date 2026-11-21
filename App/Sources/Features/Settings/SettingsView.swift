@@ -1,11 +1,12 @@
 import SwiftUI
+import TriviaKit
 
 struct SettingsView: View {
     @Environment(PlayerStore.self) private var store
-    @AppStorage("soundEnabled") private var soundEnabled = true
-    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
-    @AppStorage("relaxedMode") private var relaxedMode = false
-    @AppStorage("animatedBackgrounds") private var animatedBackgrounds = true
+    @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
+    @AppStorage(SettingKey.relaxedMode) private var relaxedMode = false
+    @AppStorage(SettingKey.animatedBackgrounds) private var animatedBackgrounds = true
+    @State private var confirmingClear = false
 
     var body: some View {
         Form {
@@ -15,7 +16,6 @@ struct SettingsView: View {
                 Text("No timer and no speed bonus. You still earn points, streaks and Sparks.")
             }
             Section {
-                Toggle("Sound", isOn: $soundEnabled)
                 Toggle("Haptics", isOn: $hapticsEnabled)
             }
             Section {
@@ -23,6 +23,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Backgrounds also hold still when Reduce Motion or Low Power Mode is on. Change your theme in Profile > Style shop.")
             }
+            flaggedQuestions
             Section("About") {
                 NavigationLink("Credits") { CreditsView() }
                 LabeledContent("Questions", value: store.bank.questions.count.formatted())
@@ -30,8 +31,30 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Theme.paper)
+        .themeBackground()
         .navigationTitle("Settings")
+    }
+
+    /// Questions flagged during play stay on this phone until they're sent,
+    /// so there's a way to get them to whoever reviews the question bank.
+    @ViewBuilder private var flaggedQuestions: some View {
+        let reports = store.progress.reports
+        if !reports.isEmpty {
+            Section {
+                ShareLink(item: QuestionReport.summary(of: reports)) {
+                    Label("Send \(reports.count) flagged question\(reports.count == 1 ? "" : "s")",
+                          systemImage: "flag.fill")
+                }
+                Button("Clear flagged questions", role: .destructive) { confirmingClear = true }
+            } header: {
+                Text("Flagged questions")
+            } footer: {
+                Text("Share them by Mail, Messages or TestFlight feedback so bad questions get fixed. Clear the list once they're sent.")
+            }
+            .confirmationDialog("Clear flagged questions?", isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Clear", role: .destructive) { store.clearReports() }
+            }
+        }
     }
 
     private static var version: String {
@@ -65,7 +88,7 @@ struct CreditsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Theme.paper)
+        .themeBackground()
         .navigationTitle("Credits")
     }
 }

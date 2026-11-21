@@ -3,9 +3,9 @@ import TriviaKit
 
 struct HomeView: View {
     @Environment(PlayerStore.self) private var store
-    @AppStorage("relaxedMode") private var relaxedMode = false
-    @AppStorage("gameMode") private var mode: GameMode = .classic
-    @AppStorage("difficulty") private var difficulty: Difficulty = .mixed
+    @AppStorage(SettingKey.relaxedMode) private var relaxedMode = false
+    @AppStorage(SettingKey.gameMode) private var mode: GameMode = .classic
+    @AppStorage(SettingKey.difficulty) private var difficulty: Difficulty = .mixed
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var round: RoundRequest?
     /// Keeps category names lined up while the icon grows with Dynamic Type.
@@ -27,8 +27,7 @@ struct HomeView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.s)
             .padding(.bottom, Space.xl)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .scrollBounceBehavior(.basedOnSize)
         .themeBackground()
@@ -220,150 +219,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-}
-
-/// A labeled row of compact pill choices on the accent card. The label sits
-/// beside the pills so each option set takes a single line.
-struct OptionRow<Option: Hashable>: View {
-    let label: String
-    let options: [Option]
-    @Binding var selection: Option
-    let title: KeyPath<Option, String>
-    /// For light cards: the picked chip is the blue one. Home's blue card
-    /// uses the default, where the picked chip is white.
-    var inverted = false
-
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @ScaledMetric(relativeTo: .caption) private var labelWidth: CGFloat = 44
-
-    var body: some View {
-        let layout = typeSize > .xxLarge
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.xs))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Space.s))
-        layout {
-            Text(label)
-                .eyebrow()
-                .opacity(0.85)
-                .frame(minWidth: typeSize > .xxLarge ? nil : labelWidth, alignment: .leading)
-            FlowLayout(spacing: 6) {
-                ForEach(options, id: \.self) { option in
-                    let on = option == selection
-                    Button { selection = option } label: {
-                        Text(option[keyPath: title])
-                            .font(.footnote.weight(.bold))
-                            .padding(.horizontal, Space.m)
-                            .frame(minHeight: 36)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(ChunkyButtonStyle(fill: on != inverted ? Theme.card : Theme.accent,
-                                                   foreground: on != inverted ? Theme.ink : .white,
-                                                   shape: AnyShape(Theme.pill),
-                                                   depth: on ? 3 : 2))
-                    .accessibilityAddTraits(on ? .isSelected : [])
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(label)
-    }
-}
-
-/// An SF Symbol for each category, so tiles read at a glance.
-enum CategoryStyle {
-    static func symbol(for category: String) -> String {
-        switch category.lowercased() {
-        case "general": "lightbulb.fill"
-        case "science": "atom"
-        case "history": "building.columns.fill"
-        case "geography": "globe.americas.fill"
-        case "movies": "film.fill"
-        case "tv": "tv.fill"
-        case "music": "music.note"
-        case "sports": "figure.run"
-        case "games": "gamecontroller.fill"
-        case "books": "book.fill"
-        case "art": "paintpalette.fill"
-        case "nature": "leaf.fill"
-        case "tech": "cpu.fill"
-        case "pop culture": "star.fill"
-        default: "questionmark.circle.fill"
-        }
-    }
-}
-
-struct SectionLabel: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        Text(text)
-            .eyebrow()
-            .foregroundStyle(Theme.muted)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
-
-struct SparksPill: View {
-    let amount: Int
-    /// The bolt grows with Dynamic Type alongside the number.
-    @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 16
-
-    var body: some View {
-        HStack(spacing: 6) {
-            SparkIcon(size: iconSize)
-            Text("\(amount) Sparks").font(.subheadline.bold())
-        }
-        .foregroundStyle(Theme.ink)
-        .padding(.horizontal, 12)
-        .frame(minHeight: 36)
-        .background(Theme.pill.fill(Theme.card))
-        .overlay(Theme.pill.stroke(Theme.ink, lineWidth: Theme.border))
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// Wrapping row layout for chips; wraps naturally at large text sizes.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-        let width = rows.map(\.width).max() ?? 0
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX
-            for i in row.indices {
-                let size = subviews[i].sizeThatFits(.unspecified)
-                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
-
-    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
-        var rows: [Row] = [Row()]
-        for i in subviews.indices {
-            let size = subviews[i].sizeThatFits(.unspecified)
-            let needed = rows[rows.count - 1].indices.isEmpty ? size.width : rows[rows.count - 1].width + spacing + size.width
-            if needed > width, !rows[rows.count - 1].indices.isEmpty {
-                rows.append(Row())
-            }
-            var row = rows[rows.count - 1]
-            row.width = row.indices.isEmpty ? size.width : row.width + spacing + size.width
-            row.height = max(row.height, size.height)
-            row.indices.append(i)
-            rows[rows.count - 1] = row
-        }
-        return rows
     }
 }
 

@@ -63,14 +63,11 @@ final class GameCenter: NSObject {
 
     private(set) var auth: Auth = .checking
     private(set) var challenges: [ChallengeItem] = []
-    private(set) var rivalries: ChallengeRivalryBook
     /// Every finished challenge with both scores, newest first.
     private(set) var history: ChallengeHistory
     /// Rules for the next challenge you start. Remembered between launches.
     var nextSetup: ChallengeSetup {
-        didSet {
-            if let data = try? JSONEncoder().encode(nextSetup) { defaults.set(data, forKey: Self.setupKey) }
-        }
+        didSet { defaults.setEncoded(nextSetup, forKey: Self.setupKey) }
     }
 
     // Friends hub (see GameCenter+Friends.swift).
@@ -99,9 +96,14 @@ final class GameCenter: NSObject {
     /// Players seen in matches or the friends list, for starting a
     /// challenge with someone straight from their page.
     @ObservationIgnored var knownPlayers: [String: GKPlayer] = [:]
+    /// Debug demo only: sample head-to-head records, so the demo never
+    /// writes into the player's real progress.
+    private var demoRivals: RivalryBook?
     private static let historyKey = "challenge.history.v1"
     private static let setupKey = "challenge.setup.v1"
-    private static let rivalriesKey = "rivalries.v1"
+    /// Older builds kept a second copy of head-to-head records here. Read
+    /// once at launch for its list of counted matches, then removed.
+    private static let legacyRivalriesKey = "rivalries.v1"
     private static let pendingKey = "challenge.pendingTurns.v1"
     /// Turns played but not yet sent, by match ID. Kept on the phone so a
     /// dropped connection never loses a score or lets a round be replayed.
@@ -111,27 +113,12 @@ final class GameCenter: NSObject {
         self.store = store
         self.defaults = defaults
         self.isDemo = demo
-        if let data = defaults.data(forKey: Self.historyKey),
-           let saved = try? JSONDecoder().decode(ChallengeHistory.self, from: data) {
-            history = saved
-        } else {
-            history = ChallengeHistory()
-        }
-        if let data = defaults.data(forKey: Self.setupKey),
-           let saved = try? JSONDecoder().decode(ChallengeSetup.self, from: data) {
-            nextSetup = saved.sanitized()
-        } else {
-            nextSetup = .standard
-        }
-        if let data = defaults.data(forKey: Self.rivalriesKey),
-           let saved = try? JSONDecoder().decode(ChallengeRivalryBook.self, from: data) {
-            rivalries = saved
-        } else {
-            rivalries = ChallengeRivalryBook()
-        }
-        if let data = defaults.data(forKey: Self.pendingKey),
-           let saved = try? JSONDecoder.challenge.decode([String: ChallengeTurn].self, from: data) {
-            pending = saved
+        history = defaults.decoded(ChallengeHistory.self, forKey: Self.historyKey) ?? ChallengeHistory()
+        nextSetup = defaults.decoded(ChallengeSetup.self, forKey: Self.setupKey)?.sanitized() ?? .standard
+        pending = defaults.decoded([String: ChallengeTurn].self, forKey: Self.pendingKey, using: .challenge) ?? [:]
+        if let legacy = defaults.decoded(LegacyRivalries.self, forKey: Self.legacyRivalriesKey) {
+            store.markMatchesCounted(legacy.countedMatchIDs)
+            defaults.removeObject(forKey: Self.legacyRivalriesKey)
         }
         super.init()
         store.onRoundRecorded = { [weak self] kind in self?.postScores(after: kind) }
@@ -142,6 +129,9 @@ final class GameCenter: NSObject {
     var yourTurnCount: Int { challenges.filter { $0.status == .yourTurn || $0.status == .invited }.count }
 
     var localPlayerID: String { isDemo ? "me" : GKLocalPlayer.local.gamePlayerID }
+
+    /// Head-to-head records, kept with the rest of the player's progress.
+    var rivals: RivalryBook { demoRivals ?? store.progress.rivals }
     var localPlayerName: String { isDemo ? "You" : GKLocalPlayer.local.displayName }
 
     // MARK: Sign in
@@ -252,13 +242,13 @@ final class GameCenter: NSObject {
             item.status = .finished(outcome)
             if let outcome, let opponentID = item.opponentID, let data,
                data.isContested(between: me, and: opponentID) {
-                addToRivalries(outcome, matchID: match.matchID, opponentID: opponentID,
-                               name: name, playedAt: updated)
+                // Both dedupe by match ID, so seeing the match again is a no-op.
+                store.recordMatch(outcome, against: opponentID, name: name,
+                                  matchID: match.matchID, at: updated)
                 addToHistory(ChallengeGame(matchID: match.matchID, data: data, me: me,
                                            opponentID: opponentID, opponentName: name,
                                            outcome: outcome, playedAt: updated))
             }
-            item.setup = data?.setup
         case _ where mine?.status == .invited:
             item.status = .invited
         case _ where myTurn:
@@ -389,9 +379,7 @@ final class GameCenter: NSObject {
 
     private func setPending(_ turn: ChallengeTurn?, for matchID: String) {
         pending[matchID] = turn
-        if let data = try? JSONEncoder.challenge.encode(pending) {
-            defaults.set(data, forKey: Self.pendingKey)
-        }
+        defaults.setEncoded(pending, forKey: Self.pendingKey, using: .challenge)
     }
 
     /// Sends rounds that were played offline. Runs before each lobby load.
@@ -440,12 +428,6 @@ final class GameCenter: NSObject {
         }
         match.message = "Challenge finished. See who won!"
         try await match.endMatchInTurn(withMatch: data.encoded())
-    }
-
-    /// Leaves a round partway: whatever was answered counts, the rest are
-    /// wrong. Same as playing it out, so quitting never beats losing.
-    func forfeit(_ session: GameSession, in round: ChallengeRound) async throws -> ChallengeData {
-        try await submit(session, in: round)
     }
 
     /// Starts a new match with the same friend, on the same rules, and opens it.
@@ -573,27 +555,9 @@ final class GameCenter: NSObject {
     /// enough that a forgotten challenge comes back and gets closed out.
     private static let turnTimeout: TimeInterval = 2 * 24 * 60 * 60
 
-    private func addToRivalries(_ outcome: ChallengeOutcome, matchID: String,
-                                opponentID: String, name: String, playedAt: Date) {
-        guard rivalries.add(outcome, matchID: matchID, opponentID: opponentID,
-                            opponentName: name, playedAt: playedAt) else { return }
-        // Feeds Profile's rivalry stamps (first win, 10 wins vs a friend).
-        let result: MatchOutcome = switch outcome {
-        case .won: .win
-        case .lost: .loss
-        case .tied: .tie
-        }
-        store.recordMatch(result, against: opponentID, name: name)
-        if let data = try? JSONEncoder().encode(rivalries) {
-            defaults.set(data, forKey: Self.rivalriesKey)
-        }
-    }
-
     private func addToHistory(_ game: ChallengeGame?) {
         guard let game, history.add(game) else { return }
-        if let data = try? JSONEncoder().encode(history) {
-            defaults.set(data, forKey: Self.historyKey)
-        }
+        defaults.setEncoded(history, forKey: Self.historyKey)
     }
 
     private static func outcome(from gk: GKTurnBasedMatch.Outcome) -> ChallengeOutcome? {
@@ -605,24 +569,24 @@ final class GameCenter: NSObject {
         }
     }
 
-    private func present(_ controller: UIViewController) {
-        guard let root = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .sorted(by: { a, _ in a.activationState == .foregroundActive })
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?.rootViewController else { return }
-        var top = root
-        while let next = top.presentedViewController { top = next }
-        top.present(controller, animated: true)
+    /// The view controller on top of the key window, to present Game
+    /// Center's own screens over whatever is showing.
+    private var topViewController: UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        var top = scene?.keyWindow?.rootViewController
+        while let next = top?.presentedViewController { top = next }
+        return top
     }
 
+    private func present(_ controller: UIViewController) {
+        topViewController?.present(controller, animated: true)
+    }
+
+    /// Closes Game Center's friend picker if it's up, then runs `action`.
     private func dismissPresented(then action: @escaping @MainActor () -> Void) {
-        let root = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?.rootViewController
-        if let presented = root?.presentedViewController, presented is GKTurnBasedMatchmakerViewController {
-            presented.dismiss(animated: true) { action() }
+        if let picker = topViewController as? GKTurnBasedMatchmakerViewController {
+            picker.dismiss(animated: true) { action() }
         } else {
             action()
         }
@@ -637,6 +601,11 @@ final class GameCenter: NSObject {
         false
         #endif
     }
+}
+
+/// The part of the old standalone rivalry file still worth reading.
+private struct LegacyRivalries: Decodable {
+    var countedMatchIDs: Set<String> = []
 }
 
 enum ChallengeError: LocalizedError {
@@ -734,14 +703,13 @@ private extension GameCenter {
             ChallengeItem(id: "d5", opponentID: "sam", opponentName: "Sam", status: .finished(.lost),
                           myPoints: 870, theirPoints: 1_190, updated: now.addingTimeInterval(-172_800)),
         ]
-        var book = ChallengeRivalryBook()
+        var book = RivalryBook()
         for (i, (id, name, outcome)) in [("maya", "Maya", ChallengeOutcome.won), ("maya", "Maya", .won),
                                          ("maya", "Maya", .lost), ("sam", "Sam", .lost),
                                          ("jordan", "Jordan", .tied)].enumerated() {
-            book.add(outcome, matchID: "demo\(i)", opponentID: id, opponentName: name,
-                     playedAt: now.addingTimeInterval(Double(-i) * 3_600))
+            book.add(outcome, against: id, name: name, at: now.addingTimeInterval(Double(-i) * 3_600))
         }
-        rivalries = book
+        demoRivals = book
         var log = ChallengeHistory()
         let demoGames: [(String, String, ChallengeOutcome, Int, Int, ChallengeSetup)] = [
             ("maya", "Maya", .won, 1_360, 1_020, .standard),

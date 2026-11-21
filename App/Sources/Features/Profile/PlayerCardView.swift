@@ -420,20 +420,3 @@ struct CardShape: Shape {
         }
     }
 }
-
-/// Head-to-head record chip for lobbies and friend lists.
-struct RivalryBadge: View {
-    let record: RivalRecord
-
-    var body: some View {
-        Label("You \(record.summary)", systemImage: "person.2.fill")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Theme.pill.fill(Theme.card))
-            .overlay(Theme.pill.stroke(Theme.ink, lineWidth: 1.5))
-            .accessibilityLabel("Your record against \(record.name): \(record.wins) wins, \(record.losses) losses"
-                                + (record.ties > 0 ? ", \(record.ties) ties" : ""))
-    }
-}

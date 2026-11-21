@@ -29,11 +29,15 @@ cd Packages/TriviaKit && swift test
 
 ```
 App/
-  Sources/App/          App entry + root TabView
-  Sources/Features/     Home, Play (quiz), Multiplayer (Friends: Game Center challenges), Settings
-  Resources/            Asset catalog
-Packages/TriviaKit/     Pure Swift game logic (models, scoring) + tests
-docs/iphone-duo.md      iPhone Duo rules and test checklist
+  Sources/App/          App entry, root TabView, PlayerStore, saving
+  Sources/Design/       Theme colors, app themes + animated backgrounds, motion, shared components
+  Sources/Features/     Home, Play (quiz, summary, round clock), Daily, Events,
+                        Profile (Player Card, Card Studio, Style and Power-up shops),
+                        Multiplayer (Friends: Game Center challenges, leaderboards), Settings
+  Resources/            Asset catalog, question JSON, privacy manifest
+Packages/TriviaKit/     Pure Swift game logic (questions, scoring, progress, challenges) + tests
+docs/                   iPhone Duo, Game Center setup, question bank, Sparks economy, privacy
+scripts/                TestFlight upload, OpenTDB import, app icon
 project.yml             XcodeGen project definition
 .github/workflows/      CI: package tests + simulator build
 ```
@@ -46,7 +50,7 @@ test every pose in Xcode's Device Hub.
 
 ## Question bank
 
-About 4,500 questions ship in the app: our own (`originals.json`) plus a seed
+About 5,600 questions ship in the app: our own (`originals.json`, plus reviewed AI-drafted ones in `originals-ai.json`) plus a seed
 from the Open Trivia Database (`opentdb.json`, CC BY-SA 4.0, credited in
 Settings > Credits). See [docs/question-bank.md](docs/question-bank.md).
 
@@ -61,9 +65,10 @@ Archives with automatic signing (team 433TNCP697, bundle ID
 exist in App Store Connect first; see the comments in the script.
 
 ## Roadmap
-- [x] Question bank (bundled JSON + categories)
+- [x] Question bank (bundled JSON + categories, no repeats until a pool runs out)
 - [x] Timed rounds, streaks, power-ups, haptics
-- [ ] Sparks shop for power-ups
-- [ ] Game Center sign-in, leaderboards
-- [ ] Real-time and turn-based multiplayer
+- [x] Daily challenge, Survival and Speed modes, mastery, weekly events
+- [x] Sparks shops: power-ups, app themes, Player Card cosmetics
+- [x] Game Center sign-in, friend challenges (turn-based), friends leaderboards
+- [ ] Live (real-time) rounds
 - [ ] Duo: fold-aware layout, side-by-side scoreboard

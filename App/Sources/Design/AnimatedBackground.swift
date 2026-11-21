@@ -17,7 +17,7 @@ struct ThemeBackground: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("animatedBackgrounds") private var animationsOn = true
+    @AppStorage(SettingKey.animatedBackgrounds) private var animationsOn = true
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     var body: some View {

@@ -58,10 +58,9 @@ struct FriendsView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.s)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
-        .background(Theme.paper)
+        .themeBackground()
         .toolbar(.hidden, for: .navigationBar)
         .refreshable {
             await gameCenter.refresh()
@@ -233,7 +232,7 @@ struct ChallengeSection: View {
                 SectionLabel(title)
                 ForEach(items) { item in
                     ChallengeRow(item: item,
-                                 record: item.opponentID.flatMap(gameCenter.rivalries.record(against:)))
+                                 record: item.opponentID.flatMap(gameCenter.rivals.record(for:)))
                 }
             }
         }
@@ -244,7 +243,7 @@ struct ChallengeSection: View {
 
 private struct ChallengeRow: View {
     let item: ChallengeItem
-    let record: HeadToHead?
+    let record: RivalRecord?
 
     @Environment(GameCenter.self) private var gameCenter
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -375,7 +374,7 @@ private struct ChallengeRow: View {
 
 /// "3–1" with a small trophy, for head-to-head records.
 struct RecordChip: View {
-    let record: HeadToHead
+    let record: RivalRecord
 
     var body: some View {
         Label(record.summary, systemImage: "trophy.fill")

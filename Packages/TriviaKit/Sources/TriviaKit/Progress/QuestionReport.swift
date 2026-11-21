@@ -29,4 +29,11 @@ public struct QuestionReport: Codable, Equatable, Sendable, Identifiable {
         self.reason = reason
         reportedAt = date
     }
+
+    /// Plain text for sending flagged questions to the question reviewers:
+    /// one line per report.
+    public static func summary(of reports: [QuestionReport]) -> String {
+        let lines = reports.map { "[\($0.category)] \($0.prompt) | \($0.reason.label)" }
+        return (["Quizio flagged questions (\(reports.count))"] + lines).joined(separator: "\n")
+    }
 }

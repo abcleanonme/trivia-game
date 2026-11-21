@@ -2,17 +2,6 @@ import Foundation
 import Testing
 @testable import TriviaKit
 
-/// Deterministic RNG so power-up and dealing tests are repeatable.
-struct SeededRNG: RandomNumberGenerator {
-    var state: UInt64
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
-}
 
 private func q(_ n: Int, correct: Int = 0) -> Question {
     Question(category: "Test", prompt: "Q\(n)", choices: ["A", "B", "C", "D"], correctIndex: correct)
@@ -150,7 +139,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     }
 
     @Test func fiftyFiftyRemovesTwoWrongAnswers() {
-        var rng = SeededRNG(state: 42)
+        var rng = SplitMix64(seed: 42)
         var game = GameSession(questions: makeQuestions(1))
         do { let ok = game.use(.fiftyFifty, using: &rng); #expect(ok) }
         #expect(game.eliminated.count == 2)
@@ -232,7 +221,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
 
 @Suite struct QuestionBankTests {
     @Test func dealsDistinctQuestionsAndReserve() {
-        var rng = SeededRNG(state: 7)
+        var rng = SplitMix64(seed: 7)
         let bank = QuestionBank(questions: makeQuestions(20))
         let round = bank.dealRound(count: 10, reserve: 3, using: &rng)
         #expect(round.questions.count == 10)
@@ -242,7 +231,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     }
 
     @Test func shufflingKeepsTheRightAnswer() {
-        var rng = SeededRNG(state: 1)
+        var rng = SplitMix64(seed: 1)
         let original = Question(category: "T", prompt: "P", choices: ["w", "x", "y", "z"], correctIndex: 2)
         for _ in 0..<10 {
             #expect(original.shufflingChoices(using: &rng).correctAnswer == "y")
@@ -250,7 +239,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     }
 
     @Test func avoidsRecentlySeenQuestionsWhenPossible() {
-        var rng = SeededRNG(state: 3)
+        var rng = SplitMix64(seed: 3)
         let bank = QuestionBank(questions: makeQuestions(20))
         let recent = Set((0..<10).map { "q\($0)" })
         let round = bank.dealRound(count: 10, reserve: 0, avoiding: recent, using: &rng)
@@ -261,7 +250,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     }
 
     @Test func mixedRoundsSpreadAcrossCategories() {
-        var rng = SeededRNG(state: 11)
+        var rng = SplitMix64(seed: 11)
         // 60 "Games" questions and 5 each of six other categories.
         var pool = (0..<60).map { Question(category: "Games", prompt: "g\($0)", choices: ["a", "b"], correctIndex: 0) }
         for c in ["A", "B", "C", "D", "E", "F"] {
@@ -330,7 +319,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
     @Test func noRepeatsUntilPoolIsUsedUp() {
         let bank = QuestionBank(questions: Self.pool(40))
         var seen = SeenQuestions()
-        var rng = SeededRNG(state: 7)
+        var rng = SplitMix64(seed: 7)
         var dealt: [String] = []
         for _ in 0..<4 {
             let round = bank.dealRound(count: 10, reserve: 0, category: "Science", seen: seen, using: &rng)
@@ -345,7 +334,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         let bank = QuestionBank(questions: Self.pool(12))
         var seen = SeenQuestions()
         for i in 0..<12 { seen.markSeen(prompt: "Q\(i)") }   // Q0 is oldest
-        var rng = SeededRNG(state: 1)
+        var rng = SplitMix64(seed: 1)
         let round = bank.dealRound(count: 4, reserve: 0, seen: seen, using: &rng)
         #expect(Set(round.questions.map(\.prompt)) == ["Q0", "Q1", "Q2", "Q3"])
     }
@@ -358,7 +347,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         })
         var seen = SeenQuestions()
         seen.markSeen(prompt: "B0")
-        var rng = SeededRNG(state: 3)
+        var rng = SplitMix64(seed: 3)
         let round = bank.dealRound(count: 10, reserve: 0, seen: seen, using: &rng)
         #expect(!round.questions.contains { $0.prompt == "B0" })
     }

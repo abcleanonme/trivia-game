@@ -21,17 +21,14 @@ struct FriendBoardsView: View {
                             .frame(minHeight: 36)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.accent : Theme.card,
-                                                   foreground: on ? .white : Theme.ink,
-                                                   shape: AnyShape(Theme.pill),
-                                                   depth: on ? 2 : 3))
+                    .buttonStyle(.chip(selected: on, depth: on ? 2 : 3))
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
 
             VStack(alignment: .leading, spacing: Space.xs) {
                 Text(board.title).font(Theme.display(.title3))
-                Text(caption).font(.footnote).foregroundStyle(Theme.muted)
+                Text(board.caption).font(.footnote).foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(Theme.ink)
@@ -39,17 +36,6 @@ struct FriendBoardsView: View {
             content
         }
         .task(id: board) { await gameCenter.loadBoard(board) }
-    }
-
-    private var caption: String {
-        switch board {
-        case .daily: "Same ten questions for everyone today. Timed Dailies only."
-        case .streak: "Days in a row with a Daily played."
-        case .challengeWins: "Friend challenges won, all time."
-        case .correct: "Every right answer, all time."
-        case .survival: "Longest Survival run."
-        case .speed: "Most right in one Speed round."
-        }
     }
 
     @ViewBuilder private var content: some View {
@@ -81,15 +67,7 @@ struct FriendBoardsView: View {
                 .padding(Theme.cardPadding)
                 .card()
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { i, entry in
-                        if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                        BoardRow(entry: entry, board: board)
-                    }
-                }
-                .padding(.horizontal, Theme.cardPadding)
-                .padding(.vertical, Space.xs)
-                .card()
+                DividedCard(entries) { BoardRow(entry: $0, board: board) }
             }
         }
     }
@@ -176,20 +154,14 @@ struct FriendsListView: View {
             } else {
                 VStack(alignment: .leading, spacing: Space.s) {
                     SectionLabel("Your friends")
-                    VStack(spacing: 0) {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { i, friend in
-                            if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                            NavigationLink {
-                                FriendDetailView(friend: friend)
-                            } label: {
-                                FriendRow(friend: friend)
-                            }
-                            .buttonStyle(.plain)
+                    DividedCard(rows) { friend in
+                        NavigationLink {
+                            FriendDetailView(friend: friend)
+                        } label: {
+                            FriendRow(friend: friend)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, Theme.cardPadding)
-                    .padding(.vertical, Space.xs)
-                    .card()
                 }
             }
 
@@ -197,15 +169,7 @@ struct FriendsListView: View {
             if !recent.isEmpty {
                 VStack(alignment: .leading, spacing: Space.s) {
                     SectionLabel("Recent games")
-                    VStack(spacing: 0) {
-                        ForEach(Array(recent.enumerated()), id: \.element.id) { i, game in
-                            if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                            GameRow(game: game, showsOpponent: true)
-                        }
-                    }
-                    .padding(.horizontal, Theme.cardPadding)
-                    .padding(.vertical, Space.xs)
-                    .card()
+                    DividedCard(recent) { GameRow(game: $0, showsOpponent: true) }
                 }
             }
         }
@@ -249,7 +213,7 @@ private struct FriendRow: View {
 
     var body: some View {
         let stats = gameCenter.history.stats(against: friend.id)
-        let record = gameCenter.rivalries.record(against: friend.id)
+        let record = gameCenter.rivals.record(for: friend.id)
         let open = gameCenter.openChallenges(with: friend.id)
         HStack(spacing: Space.m) {
             PlayerBadge(name: friend.name, size: 38)
@@ -352,7 +316,7 @@ struct FriendDetailView: View {
 
     var body: some View {
         let stats = gameCenter.history.stats(against: friend.id)
-        let record = gameCenter.rivalries.record(against: friend.id)
+        let record = gameCenter.rivals.record(for: friend.id)
         let games = gameCenter.history.games(against: friend.id)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.l) {
@@ -380,25 +344,16 @@ struct FriendDetailView: View {
                 } else {
                     VStack(alignment: .leading, spacing: Space.s) {
                         SectionLabel("History")
-                        VStack(spacing: 0) {
-                            ForEach(Array(games.enumerated()), id: \.element.id) { i, game in
-                                if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                                GameRow(game: game)
-                            }
-                        }
-                        .padding(.horizontal, Theme.cardPadding)
-                        .padding(.vertical, Space.xs)
-                        .card()
+                        DividedCard(games) { GameRow(game: $0) }
                     }
                 }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.s)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
-        .background(Theme.paper)
+        .themeBackground()
         .navigationTitle(friend.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -409,7 +364,7 @@ struct FriendDetailView: View {
         }
     }
 
-    private func header(record: HeadToHead?) -> some View {
+    private func header(record: RivalRecord?) -> some View {
         HStack(spacing: Space.l) {
             PlayerBadge(name: friend.name, size: 64)
             VStack(alignment: .leading, spacing: Space.xs) {
@@ -530,7 +485,7 @@ struct ChallengeSetupSheet: View {
                 .padding(.horizontal, Theme.gutter)
                 .padding(.vertical, Space.m)
             }
-            .background(Theme.paper)
+            .themeBackground()
             .navigationTitle("Challenge rules")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -590,10 +545,7 @@ struct ChallengeSetupSheet: View {
                             .padding(.horizontal, Space.m)
                             .frame(minHeight: 36)
                     }
-                    .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.accent : Theme.card,
-                                                   foreground: on ? .white : Theme.ink,
-                                                   shape: AnyShape(Theme.pill),
-                                                   depth: on ? 2 : 3))
+                    .buttonStyle(.chip(selected: on, depth: on ? 2 : 3))
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }

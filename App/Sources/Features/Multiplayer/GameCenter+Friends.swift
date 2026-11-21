@@ -77,8 +77,8 @@ extension GameCenter {
         for opponent in history.opponents where seen.insert(opponent.id).inserted {
             rows.append(Friend(id: opponent.id, name: opponent.name))
         }
-        for rival in rivalries.rivals where seen.insert(rival.id).inserted {
-            rows.append(Friend(id: rival.id, name: rival.record.displayName))
+        for rival in rivals.sorted where seen.insert(rival.id).inserted {
+            rows.append(Friend(id: rival.id, name: rival.name))
         }
         for friend in friends where seen.insert(friend.id).inserted {
             rows.append(friend)
@@ -147,9 +147,8 @@ extension GameCenter {
            let points = FriendBoard.dailyScore(progress.dailies[day]) {
             posts.append((.daily, points, day.ordinal))
         }
-        let wins = rivalries.rivals.reduce(0) { $0 + $1.record.wins }
         for board in FriendBoard.allCases {
-            guard let value = board.value(progress: progress, today: today, challengeWins: wins),
+            guard let value = board.value(progress: progress, today: today),
                   value != lastPosted(board) else { continue }
             posts.append((board, value, 0))
         }

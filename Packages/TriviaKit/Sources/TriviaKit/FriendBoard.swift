@@ -76,16 +76,28 @@ public enum FriendBoard: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// One line under the board's title saying what it ranks.
+    public var caption: String {
+        switch self {
+        case .daily: "Same ten questions for everyone today. Timed Dailies only."
+        case .streak: "Days in a row with a Daily played."
+        case .challengeWins: "Friend challenges won, all time."
+        case .correct: "Every right answer, all time."
+        case .survival: "Longest Survival run."
+        case .speed: "Most right in one Speed round."
+        }
+    }
+
     /// Recurring boards show only the current period; the rest are all time.
     public var isDaily: Bool { self == .daily }
 
     /// The value to post for an all-time board, from local progress. nil for
     /// the Daily, which posts once when it's played.
-    public func value(progress: PlayerProgress, today: Day, challengeWins: Int) -> Int? {
+    public func value(progress: PlayerProgress, today: Day) -> Int? {
         switch self {
         case .daily: nil
         case .streak: progress.streak.current(on: today)
-        case .challengeWins: challengeWins
+        case .challengeWins: progress.rivals.totalWins
         case .correct: progress.stats.correctAnswers
         case .survival: progress.stats.bestSurvival
         case .speed: progress.stats.bestSpeedRound

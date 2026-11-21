@@ -40,6 +40,7 @@ final class PlayerStore {
     /// Every question the player has been shown, oldest first, so rounds
     /// deal unseen questions until a pool is used up, then the oldest.
     @ObservationIgnored private var seen: SeenQuestions
+    @ObservationIgnored private var eventPools: [String: QuestionBank] = [:]
     /// Called after a solo, Daily or event round is credited, so Game
     /// Center can post the new scores to friends' leaderboards.
     @ObservationIgnored var onRoundRecorded: (@MainActor (RoundKind) -> Void)?
@@ -52,23 +53,16 @@ final class PlayerStore {
     init(defaults: UserDefaults = .standard, bank: QuestionBank = PlayerStore.loadBundledBank()) {
         self.defaults = defaults
         self.bank = bank
-        if let data = defaults.data(forKey: Self.walletKey),
-           let saved = try? JSONDecoder().decode(Wallet.self, from: data) {
-            wallet = saved
-        } else {
-            wallet = .starter
-        }
-        if let data = defaults.data(forKey: Self.seenKey),
-           let saved = try? JSONDecoder().decode(SeenQuestions.self, from: data) {
+        wallet = defaults.decoded(Wallet.self, forKey: Self.walletKey) ?? .starter
+        progress = defaults.decoded(PlayerProgress.self, forKey: Self.progressKey) ?? PlayerProgress()
+        if let saved = defaults.decoded(SeenQuestions.self, forKey: Self.seenKey) {
             seen = saved
         } else {
-            seen = SeenQuestions(prompts: defaults.stringArray(forKey: Self.legacyRecentKey) ?? [])
-        }
-        if let data = defaults.data(forKey: Self.progressKey),
-           let saved = try? JSONDecoder().decode(PlayerProgress.self, from: data) {
-            progress = saved
-        } else {
-            progress = PlayerProgress()
+            // One-time move from the old recent-prompts list.
+            let migrated = SeenQuestions(prompts: defaults.stringArray(forKey: Self.legacyRecentKey) ?? [])
+            defaults.setEncoded(migrated, forKey: Self.seenKey)
+            defaults.removeObject(forKey: Self.legacyRecentKey)
+            seen = migrated
         }
         applyTheme()
     }
@@ -104,10 +98,19 @@ final class PlayerStore {
             let round = DailyChallenge.round(for: day, from: bank)
             return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
         case .event(let event, _):
-            let round = event.pool(from: bank).dealRound(seen: seen)
+            let round = eventPool(event).dealRound(seen: seen)
             remember(round.questions[...])
             return GameSession(questions: round.questions, reserve: round.reserve, isTimed: !relaxed)
         }
+    }
+
+    /// An event's questions, matched against the whole bank once per run
+    /// of the app instead of once per round.
+    private func eventPool(_ event: WeeklyEvent) -> QuestionBank {
+        if let cached = eventPools[event.id] { return cached }
+        let pool = event.pool(from: bank)
+        eventPools[event.id] = pool
+        return pool
     }
 
     /// Credits a round (finished, or left early) and pays out its Sparks.
@@ -121,7 +124,7 @@ final class PlayerStore {
         remember(session.shownQuestions[...])
         let rewards = progress.record(session, kind: kind, finished: finished)
         wallet.earn(sparks: rewards.sparks)
-        save()
+        saveWallet()
         saveProgress()
         onRoundRecorded?(kind)
         return rewards
@@ -145,10 +148,7 @@ final class PlayerStore {
 
     private func remember(_ questions: ArraySlice<Question>) {
         seen.markSeen(questions)
-        if let data = try? JSONEncoder().encode(seen) {
-            defaults.set(data, forKey: Self.seenKey)
-        }
-        defaults.removeObject(forKey: Self.legacyRecentKey)
+        defaults.setEncoded(seen, forKey: Self.seenKey)
     }
 
     // MARK: Style and Player Card
@@ -157,7 +157,7 @@ final class PlayerStore {
     func buy(_ cosmetic: Cosmetic) -> Bool {
         guard progress.inventory.buy(cosmetic.id, with: &wallet) else { return false }
         progress.inventory.equip(cosmetic.id)
-        save()
+        saveWallet()
         saveProgress()
         applyTheme()
         return true
@@ -187,20 +187,29 @@ final class PlayerStore {
         saveProgress()
     }
 
+    func clearReports() {
+        progress.reports.removeAll()
+        saveProgress()
+    }
+
     // MARK: Friends
 
-    /// For the multiplayer layer: record a finished friend match.
-    @discardableResult
-    func recordMatch(_ outcome: MatchOutcome, against friendID: String, name: String) -> [Stamp] {
-        let stamps = progress.recordMatch(outcome, against: friendID, name: name)
+    /// For the multiplayer layer: record a finished friend match. Each
+    /// match ID counts once, however often Game Center reports it.
+    func recordMatch(_ outcome: ChallengeOutcome, against friendID: String, name: String,
+                     matchID: String, at date: Date) {
+        guard progress.recordMatch(outcome, against: friendID, name: name, matchID: matchID, at: date) != nil else { return }
         saveProgress()
-        return stamps
+    }
+
+    /// Carries over which matches older builds already counted.
+    func markMatchesCounted(_ matchIDs: Set<String>) {
+        progress.rivals.markCounted(matchIDs)
+        saveProgress()
     }
 
     private func saveProgress() {
-        if let data = try? JSONEncoder().encode(progress) {
-            defaults.set(data, forKey: Self.progressKey)
-        }
+        defaults.setEncoded(progress, forKey: Self.progressKey)
     }
 
     /// Uses a power-up if the round rules allow it and the player has one.
@@ -209,7 +218,7 @@ final class PlayerStore {
         guard wallet.count(of: powerUp) > 0, session.canUse(powerUp) else { return false }
         session.use(powerUp)
         wallet.consume(powerUp)
-        save()
+        saveWallet()
         return true
     }
 
@@ -218,19 +227,17 @@ final class PlayerStore {
     @discardableResult
     func buy(_ offer: PowerUpOffer) -> Bool {
         guard wallet.buy(offer) else { return false }
-        save()
+        saveWallet()
         return true
     }
 
     func award(sparks: Int) {
         wallet.earn(sparks: sparks)
-        save()
+        saveWallet()
     }
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(wallet) {
-            defaults.set(data, forKey: Self.walletKey)
-        }
+    private func saveWallet() {
+        defaults.setEncoded(wallet, forKey: Self.walletKey)
     }
 
     /// Bundled question files: our own questions (hand-written, then

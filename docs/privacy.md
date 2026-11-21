@@ -19,9 +19,13 @@ between launches:
 
 - your Sparks balance and power-up stock,
 - which questions you've seen recently (so rounds don't repeat),
-- your settings (sound, haptics, Relaxed mode).
+- your progress, Player Card, theme and head-to-head records,
+- questions you flag as wrong or unclear,
+- your settings (haptics, Relaxed mode, animated backgrounds).
 
-This data never leaves your device. Deleting the app deletes it.
+This data never leaves your device unless you choose to send your flagged
+questions from Settings, which opens the share sheet so you pick how they're
+sent. Deleting the app deletes it.
 
 ## Multiplayer and friends
 

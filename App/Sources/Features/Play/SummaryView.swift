@@ -10,8 +10,6 @@ struct SummaryView: View {
     var rewards: RoundRewards? = nil
     /// nil hides Play again (the Daily is one try a day).
     let onPlayAgain: (() -> Void)?
-    /// Shown after a friend match.
-    var onRematch: (() -> Void)? = nil
     let onHome: () -> Void
 
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -102,8 +100,7 @@ struct SummaryView: View {
             .padding(.horizontal, Theme.gutter)
             .padding(.top, Space.l)
             .padding(.bottom, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .scrollBounceBehavior(.basedOnSize)
         .overlay {
@@ -111,9 +108,9 @@ struct SummaryView: View {
                 .ignoresSafeArea()
         }
         .safeAreaInset(edge: .bottom) {
-            // One row: a small Home and a big primary action (Rematch or
-            // Play again). Stacks when large text would squeeze them. The
-            // Daily has no Play again, so Home goes full width.
+            // One row: a small Home and a big Play again. Stacks when large
+            // text would squeeze them. The Daily has no Play again, so Home
+            // goes full width.
             (typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(spacing: 10))
                 : AnyLayout(HStackLayout(spacing: 10))) {
@@ -121,18 +118,11 @@ struct SummaryView: View {
                     Label("Home", systemImage: "house.fill")
                         .font(.headline)
                         .padding(.horizontal, 18)
-                        .frame(maxWidth: hasPrimary && !typeSize.isAccessibilitySize ? nil : .infinity,
+                        .frame(maxWidth: onPlayAgain != nil && !typeSize.isAccessibilitySize ? nil : .infinity,
                                minHeight: 52)
                 }
                 .buttonStyle(.chunky(fill: Theme.card, capsule: true))
-                if let onRematch {
-                    Button(action: onRematch) {
-                        Label("Rematch", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.title3.bold())
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                    }
-                    .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
-                } else if let onPlayAgain {
+                if let onPlayAgain {
                     Button(action: onPlayAgain) {
                         Label("Play again", systemImage: "arrow.clockwise")
                             .font(.title3.bold())
@@ -143,8 +133,7 @@ struct SummaryView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
             .background(Theme.paper)
             .staggeredAppear(5, step: 0.12, distance: 30)
         }
@@ -152,8 +141,6 @@ struct SummaryView: View {
     }
 
     private var sparksEarned: Int { rewards?.sparks ?? session.sparksEarned }
-
-    private var hasPrimary: Bool { onRematch != nil || onPlayAgain != nil }
 
     private var headline: String {
         if let daily = rewards?.daily { return "Daily #\(daily.day.dailyNumber) complete" }

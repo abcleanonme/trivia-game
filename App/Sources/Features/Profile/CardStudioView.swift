@@ -12,6 +12,7 @@ struct CardStudioView: View {
     @State private var tryingOn: Cosmetic?
     @State private var name = ""
     @State private var equipTick = 0
+    @AppStorage(SettingKey.haptics) private var hapticsEnabled = true
 
     enum Part: String, CaseIterable, Identifiable {
         case avatar, name, border, background, shape, corner, sticker, finish
@@ -75,17 +76,16 @@ struct CardStudioView: View {
                 }
                 .padding(.horizontal, Theme.gutter)
                 .padding(.vertical, Space.l)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
+                .readableWidth()
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .background(Theme.paper)
+        .themeBackground()
         .safeAreaInset(edge: .bottom) {
             if let tryingOn { buyBar(for: tryingOn) }
         }
         .animation(.snappy, value: tryingOn?.id)
-        .sensoryFeedback(.selection, trigger: equipTick)
+        .sensoryFeedback(.selection, trigger: equipTick) { _, _ in hapticsEnabled }
         .navigationTitle("Customize card")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -137,8 +137,7 @@ struct CardStudioView: View {
         .padding(.horizontal, Theme.gutter)
         .padding(.top, Space.s)
         .padding(.bottom, Space.m)
-        .frame(maxWidth: 640)
-        .frame(maxWidth: .infinity)
+        .readableWidth()
         .background(Theme.paper)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
@@ -257,9 +256,7 @@ struct CardStudioView: View {
                             .padding(.horizontal, Space.m)
                             .frame(minHeight: 36)
                     }
-                    .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.accent : Theme.card,
-                                                   foreground: on ? .white : Theme.ink,
-                                                   shape: AnyShape(Theme.pill), depth: 2))
+                    .buttonStyle(.chip(selected: on))
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
@@ -296,7 +293,7 @@ struct CardStudioView: View {
                 .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
                 .disabled(!canAfford)
             } else {
-                Text(lockReason(item))
+                Text(item.lockReason)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .multilineTextAlignment(.center)
@@ -307,18 +304,9 @@ struct CardStudioView: View {
         }
         .padding(.horizontal, Theme.gutter)
         .padding(.vertical, Space.s)
-        .frame(maxWidth: 640)
-        .frame(maxWidth: .infinity)
+        .readableWidth()
         .background(.bar)
         .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
-
-    private func lockReason(_ item: Cosmetic) -> String {
-        switch item.unlock {
-        case .stamp(let stamp): "Unlocks with the \(stamp.name) stamp"
-        case .event(let id): "Finish the \(WeeklyEvent.all.first { $0.id == id }?.title ?? "weekly event") track"
-        default: ""
-        }
     }
 
     /// A random mix of owned items, one per slot.
@@ -386,6 +374,17 @@ struct TileLabel<Swatch: View>: View {
 
 /// A small picture of one cosmetic, drawn with the rest of your card so you
 /// can judge it in context.
+extension Cosmetic {
+    /// How to get an item that can't be bought with Sparks.
+    var lockReason: String {
+        switch unlock {
+        case .stamp(let stamp): "Unlocks with the \(stamp.name) stamp"
+        case .event(let id): "Finish the \(WeeklyEvent.all.first { $0.id == id }?.title ?? "weekly event") track to unlock"
+        default: ""
+        }
+    }
+}
+
 struct CosmeticSwatch: View {
     let item: Cosmetic
     @Environment(PlayerStore.self) private var store

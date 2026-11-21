@@ -69,8 +69,7 @@ struct ShopView: View {
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.vertical, Space.m)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .readableWidth()
         }
         .themeBackground()
         .navigationTitle("Style shop")
@@ -107,19 +106,11 @@ struct ShopView: View {
             .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
             .disabled(store.wallet.sparks < price)
         } else {
-            Text(lockReason(item))
+            Text(item.lockReason)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.muted)
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .multilineTextAlignment(.center)
-        }
-    }
-
-    private func lockReason(_ item: Cosmetic) -> String {
-        switch item.unlock {
-        case .stamp(let stamp): "Earned with the \(stamp.name) stamp."
-        case .event(let id): "Finish the \(WeeklyEvent.all.first { $0.id == id }?.title ?? "event") track to unlock."
-        default: ""
         }
     }
 }
@@ -137,7 +128,7 @@ private struct ShopTile: View {
         let wearing = inv.equipped(item.slot).id == item.id
         Button(action: onTap) {
             VStack(spacing: 6) {
-                swatch.frame(height: 48)
+                CosmeticSwatch(item: item).frame(height: 48)
                 Text(item.name).font(.footnote.bold()).multilineTextAlignment(.center)
                     .lineLimit(2).minimumScaleFactor(0.85)
                 Group {
@@ -157,7 +148,6 @@ private struct ShopTile: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var swatch: some View { CosmeticSwatch(item: item) }
 }
 
 /// A small mock screen in a theme's colors over its animated background,
@@ -207,7 +197,7 @@ private struct ThemePreview: View {
 }
 
 /// Shop tile swatch for a theme: its background with an accent dot.
-private struct ThemeSwatch: View {
+struct ThemeSwatch: View {
     let palette: ThemePalette
     @Environment(\.colorScheme) private var colorScheme
 
