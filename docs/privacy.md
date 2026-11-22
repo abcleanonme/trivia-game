@@ -1,0 +1,61 @@
+# Quizio Privacy Policy
+
+_Last updated: November 11, 2026_
+
+Quizio - Trivia with Friends ("Quizio", "the app") is a paid trivia game with
+no ads and no in-app purchases. This policy explains what happens to your
+data when you use it.
+
+## What we collect
+
+**Nothing.** Quizio does not collect, store on a server, sell, or share any
+personal information. There are no accounts, no analytics, no advertising
+SDKs, and no tracking of any kind.
+
+## What stays on your device
+
+The app saves a few things locally on your iPhone or iPad so the game works
+between launches:
+
+- your Sparks balance and power-up stock,
+- which questions you've seen recently (so rounds don't repeat),
+- your progress, Player Card, theme and head-to-head records,
+- questions you flag as wrong or unclear,
+- your settings (haptics, Relaxed mode, animated backgrounds).
+
+This data never leaves your device unless you choose to send your flagged
+questions from Settings, which opens the share sheet so you pick how they're
+sent. Deleting the app deletes it.
+
+## Multiplayer and friends
+
+Friend challenges and leaderboards use Apple's Game Center. If you choose to
+use them, Game Center handles your player identity, match data and scores
+under [Apple's privacy policy](https://www.apple.com/legal/privacy/). Quizio
+posts your Daily score, Daily streak, challenge wins, correct answers and best
+Survival and Speed rounds to Game Center leaderboards, where your Game Center
+friends can see them. If you allow it, Quizio reads your Game Center friends
+list to show who you can challenge; it isn't sent anywhere else. Your
+head-to-head history stays on your device.
+
+## Children
+
+Quizio does not knowingly collect information from anyone, including
+children under 13, because it collects no information at all.
+
+## Questions
+
+Many trivia questions come from the
+[Open Trivia Database](https://opentdb.com), used under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Using them
+involves no data sharing; they ship inside the app.
+
+## Contact
+
+Questions about this policy: open an issue at
+<https://github.com/abcleanonme/trivia-game/issues>.
+
+## Changes
+
+If this policy changes, the updated version will be posted here with a new
+date.
