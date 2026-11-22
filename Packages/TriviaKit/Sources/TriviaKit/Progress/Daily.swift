@@ -25,6 +25,52 @@ public enum DailyChallenge {
     }
 }
 
+extension DailyChallenge {
+    /// What a day's Daily covers, without giving away any question: how
+    /// many from each category (most first), and how many are hard.
+    public static func preview(for day: Day, from bank: QuestionBank) -> DailyPreview {
+        let questions = round(for: day, from: bank).questions
+        var counts: [String: Int] = [:]
+        for q in questions { counts[q.category, default: 0] += 1 }
+        let categories = counts
+            .map { DailyPreview.CategoryCount(category: $0.key, count: $0.value) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.category < $1.category }
+        let hard = questions.filter { $0.difficulty?.lowercased() == "hard" }.count
+        return DailyPreview(categories: categories, hardCount: hard, total: questions.count)
+    }
+}
+
+/// The spoiler-free teaser for an upcoming Daily.
+public struct DailyPreview: Equatable, Sendable {
+    public struct CategoryCount: Equatable, Sendable, Identifiable {
+        public let category: String
+        public let count: Int
+        public var id: String { category }
+    }
+
+    public let categories: [CategoryCount]
+    public let hardCount: Int
+    public let total: Int
+}
+
+/// One day on the Daily calendar.
+public enum DailyDayStatus: Equatable, Sendable {
+    case perfect, played, leftEarly, missed
+    /// Today, not played yet.
+    case open
+    case upcoming, beforeLaunch
+}
+
+/// Lifetime Daily numbers. Only finished Dailies count.
+public struct DailySummary: Equatable, Sendable {
+    public let played: Int
+    public let perfect: Int
+    /// Mean right answers per Daily, nil before the first one.
+    public let averageCorrect: Double?
+    /// Best timed Daily score.
+    public let bestPoints: Int?
+}
+
 /// One square on the share card.
 public struct DailyMark: Codable, Equatable, Sendable {
     public let correct: Bool
