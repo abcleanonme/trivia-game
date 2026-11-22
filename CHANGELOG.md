@@ -9,7 +9,7 @@ QUESTIONS
 - Easier mixed rounds: each 13-question round now has at most 2 hard and 5 medium questions, and difficulty tags were redone so "easy" really means easy.
 - New categories: Mythology, Cartoons, Comics and Vehicles. More (Food, Space, Human Body, Words, Holidays, Brands) unlock as they fill up.
 - Pick several categories at once on Home and in challenge rules.
-- 400 new Quizio original questions.
+- 379 new Quizio original questions, plus 128 more fact-checked ones from the backlog.
 
 DAILY AND WEEKLY TABS
 - Daily has its own tab: play today's Daily, see tomorrow's category mix and a countdown, a five-week streak calendar, your Daily stats, and every past Daily with its grid (tap one to share it again).
