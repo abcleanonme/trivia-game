@@ -132,7 +132,7 @@ struct FriendsView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 46)
             }
-            .buttonStyle(.chunky(fill: .white, foreground: Theme.ink, capsule: true))
+            .buttonStyle(.chunky(fill: .white, foreground: Theme.onSpark, capsule: true))
             .accessibilityHint("Pick up to \(ChallengeData.maxPlayers - 1) friends to play the same round")
             // The rules the next challenge uses, one tap to change.
             Button { editingRules = true } label: {
