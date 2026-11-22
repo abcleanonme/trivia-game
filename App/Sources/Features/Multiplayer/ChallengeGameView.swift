@@ -213,7 +213,7 @@ private struct ChallengeIntroView: View {
             lines.append(("stopwatch.fill", "Speed round: as many as you can in \(Int(GameMode.speedRoundSeconds)) seconds. Same questions as \(them)"))
         }
         let level = data.level == .mixed ? "Mixed levels" : "\(data.level.title) questions"
-        lines.append(("chart.bar.fill", data.category.map { "\(level) from \($0)" } ?? level))
+        lines.append(("chart.bar.fill", ChallengeSetup.topicSummary(data.categories).map { "\(level) from \($0)" } ?? level))
         if data.gameMode != .speed {
             lines.append(data.isTimed
                 ? ("timer", "\(Int(GameRules.questionTime)) seconds each. Answer fast for bonus points")

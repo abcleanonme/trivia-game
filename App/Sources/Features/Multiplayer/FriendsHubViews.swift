@@ -496,8 +496,6 @@ struct ChallengeSetupSheet: View {
     @Environment(PlayerStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    private static let mixed = "Mixed"
-
     var body: some View {
         @Bindable var gameCenter = gameCenter
         NavigationStack {
@@ -544,11 +542,12 @@ struct ChallengeSetupSheet: View {
                     .card()
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        SectionLabel("Category")
-                        OptionRow(label: "Topic", options: [Self.mixed] + store.bank.categories,
-                                  selection: Binding(get: { gameCenter.nextSetup.category ?? Self.mixed },
-                                                     set: { gameCenter.nextSetup.category = $0 == Self.mixed ? nil : $0 }),
-                                  title: \.self, inverted: true)
+                        SectionLabel("Categories")
+                        Text("Pick as many as you like, or Mixed for everything.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.muted)
+                        CategoryChips(categories: store.bank.playableCategories,
+                                      selection: $gameCenter.nextSetup.categories)
                     }
                     .padding(Theme.cardPadding)
                     .card()

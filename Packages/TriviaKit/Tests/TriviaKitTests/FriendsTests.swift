@@ -26,10 +26,34 @@ private func game(_ id: String, vs opponent: String = "alex", _ outcome: Challen
     }
 
     @Test func summaryListsWhatChanged() {
-        let s = ChallengeSetup(difficulty: .hard, category: "Science", length: 15,
+        let s = ChallengeSetup(difficulty: .hard, categories: ["Science"], length: 15,
                                isTimed: false, powerUpLimit: 0)
         #expect(s.summary == "15 questions · Hard · Science · No clock · No power-ups")
         #expect(s.isCustom)
+    }
+
+    @Test func summaryNamesSeveralCategories() {
+        #expect(ChallengeSetup(categories: ["Science", "Art"]).summary == "10 questions · Science & Art")
+        #expect(ChallengeSetup(categories: ["Science", "History", "Art"]).summary == "10 questions · Science, History & Art")
+        #expect(ChallengeSetup(categories: ["Science", "History", "Art", "Music"]).summary == "10 questions · Science + 3 more")
+    }
+
+    @Test func sanitizeOrdersCategories() {
+        let s = ChallengeSetup(categories: ["Art", "Science", "Art"]).sanitized()
+        #expect(s.categories == ["Science", "Art"])
+    }
+
+    @Test func oldSavedSetupReadsItsOneCategory() throws {
+        let json = #"{"mode":"classic","difficulty":"mixed","category":"Music","length":10,"isTimed":true,"powerUpLimit":2}"#
+        let s = try JSONDecoder().decode(ChallengeSetup.self, from: Data(json.utf8))
+        #expect(s.categories == ["Music"])
+        let mixed = #"{"mode":"classic","difficulty":"mixed","length":10,"isTimed":true,"powerUpLimit":2}"#
+        #expect(try JSONDecoder().decode(ChallengeSetup.self, from: Data(mixed.utf8)).categories.isEmpty)
+    }
+
+    @Test func setupRoundTripsWithSeveralCategories() throws {
+        let s = ChallengeSetup(categories: ["Science", "Art"])
+        #expect(try JSONDecoder().decode(ChallengeSetup.self, from: JSONEncoder().encode(s)) == s)
     }
 
     @Test func speedRoundAlwaysHasItsClock() {
@@ -58,13 +82,14 @@ private func game(_ id: String, vs opponent: String = "alex", _ outcome: Challen
     }
 
     @Test func setupSurvivesMatchData() throws {
-        let setup = ChallengeSetup(mode: .speed, difficulty: .easy, category: "Music",
+        let setup = ChallengeSetup(mode: .speed, difficulty: .easy, categories: ["Music"],
                                    isTimed: true, powerUpLimit: 1)
         let d = ChallengeData(setup: setup, questions: (0..<40).map { q($0) }, reserve: [q(99)])
         let decoded = try ChallengeData(matchData: d.encoded())
         #expect(decoded.gameMode == .speed)
         #expect(decoded.level == .easy)
-        #expect(decoded.setup.category == "Music")
+        #expect(decoded.setup.categories == ["Music"])
+        #expect(decoded.category == "Music")   // what older builds read
         #expect(decoded.setup.powerUpLimit == 1)
         let s = decoded.makeSession()
         #expect(s.mode == .speed)
