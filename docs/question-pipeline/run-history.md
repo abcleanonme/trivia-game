@@ -14,9 +14,11 @@ The writer and reviewer tasks each append a row per run. Rules live in writer-ru
 | Run date | PRs reviewed | Backlog reviewed | Outcome |
 |---|---|---|---|
 | 2026-11-18 | #13 | Part of the PR #7 backlog | Removed 28 duplicates from #13. About 608 backlog questions still unreviewed on 2026-11-22. |
+| 2026-11-22 | #24 | 150 (Books and Nature, oldest first) | #24: 379 kept (8 fixed, 92 relabeled easier), 21 duplicates removed. Backlog: 128 kept (7 fixed, 19 relabeled), 22 removed (19 duplicates, 3 minutiae or giveaways). 458 backlog questions still unreviewed. |
 
 ## Notes for future runs
 
 - The most common problem in drafts is restating a fact OpenTDB already has. Dedupe hard.
 - From 2026-11-22 on (rules rewritten for easier questions): General gets 100 a week, about 55% are easy, and new categories (Food, Space, Human Body, Words, Holidays, Brands) get 40 each until they reach 150.
 - 2026-11-22 writer run: the bank already covers most obvious easy facts (about half of first drafts were duplicates), so draft extra and check every draft against the bank before choosing the 400. Easy Words and Brands questions ran short, so those came in nearer 45% easy.
+- 2026-11-22 reviewer run: the writer labeled many common-knowledge questions medium or hard (only 9 hard survived in #24), so the writer should aim harder when it means hard. Backlog drafts always put the answer first; that is fine because the app shuffles choices.
