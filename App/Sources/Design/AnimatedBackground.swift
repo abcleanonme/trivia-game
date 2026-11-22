@@ -75,6 +75,8 @@ struct BackgroundPainter {
         case .fireflies: fireflies(&context, size)
         case .petals: petals(&context, size)
         case .orbits: orbits(&context, size)
+        case .leaves: leaves(&context, size)
+        case .hearts: hearts(&context, size)
         }
     }
 
@@ -294,6 +296,61 @@ struct BackgroundPainter {
             c.fill(Circle().path(in: CGRect(x: planet.x - r, y: planet.y - r, width: r * 2, height: r * 2)),
                    with: .color(color(ring + 1).opacity(0.6 * strength)))
         }
+    }
+
+    /// Leaves swinging side to side as they fall (Autumn Leaves, Matcha).
+    private func leaves(_ c: inout GraphicsContext, _ s: CGSize) {
+        for i in 0..<16 {
+            let speed = 0.014 + rand(i, 1) * 0.016
+            let progress = frac(time * speed + rand(i, 2))
+            let y = -24 + progress * (s.height + 48)
+            // A pendulum sway, wider than petals, like a real leaf.
+            let sway = sin(time * (0.5 + rand(i, 3) * 0.4) + Double(i))
+            let x = rand(i, 4) * s.width + sway * 28
+            let w = 10 + rand(i, 5) * 8
+            var leaf = c
+            leaf.translateBy(x: x, y: y)
+            leaf.rotate(by: .radians(sway * 0.9 + Double(i)))
+            var p = Path()
+            p.move(to: CGPoint(x: 0, y: -w / 2))
+            p.addQuadCurve(to: CGPoint(x: 0, y: w / 2), control: CGPoint(x: w * 0.45, y: 0))
+            p.addQuadCurve(to: CGPoint(x: 0, y: -w / 2), control: CGPoint(x: -w * 0.45, y: 0))
+            leaf.fill(p, with: .color(color(i).opacity(0.42 * strength)))
+            var vein = Path()
+            vein.move(to: CGPoint(x: 0, y: -w / 2))
+            vein.addLine(to: CGPoint(x: 0, y: w / 2 + 3))
+            leaf.stroke(vein, with: .color(color(i).opacity(0.5 * strength)), lineWidth: 1)
+        }
+    }
+
+    /// Little hearts floating up and fading (Sweetheart, Bubblegum Pop).
+    private func hearts(_ c: inout GraphicsContext, _ s: CGSize) {
+        glow(&c, at: CGPoint(x: s.width * 0.5, y: s.height), radius: s.width * 0.8, color: color(0), opacity: 0.14 * strength)
+        for i in 0..<16 {
+            let speed = 0.016 + rand(i, 1) * 0.018
+            let progress = frac(time * speed + rand(i, 2))
+            let y = s.height + 20 - progress * (s.height + 40)
+            let x = rand(i, 3) * s.width + sin(time * 0.6 + Double(i)) * 12
+            let w = 8 + rand(i, 4) * 10
+            // Fade in at the bottom and out near the top.
+            let fade = min(progress / 0.15, 1) * min((1 - progress) / 0.3, 1)
+            var heart = c
+            heart.translateBy(x: x, y: y)
+            heart.rotate(by: .radians(sin(time * 0.8 + Double(i)) * 0.25))
+            heart.fill(Self.heart(width: w), with: .color(color(i).opacity(0.4 * fade * strength)))
+        }
+    }
+
+    /// A heart centered on the origin.
+    static func heart(width w: CGFloat) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: 0, y: w * 0.4))
+        p.addCurve(to: CGPoint(x: -w / 2, y: -w * 0.1), control1: CGPoint(x: -w * 0.2, y: w * 0.2), control2: CGPoint(x: -w / 2, y: w * 0.1))
+        p.addArc(center: CGPoint(x: -w / 4, y: -w * 0.1), radius: w / 4, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        p.addArc(center: CGPoint(x: w / 4, y: -w * 0.1), radius: w / 4, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        p.addCurve(to: CGPoint(x: 0, y: w * 0.4), control1: CGPoint(x: w / 2, y: w * 0.1), control2: CGPoint(x: w * 0.2, y: w * 0.2))
+        p.closeSubpath()
+        return p
     }
 
     private func glow(_ c: inout GraphicsContext, at center: CGPoint, radius: CGFloat, color: Color, opacity: Double) {

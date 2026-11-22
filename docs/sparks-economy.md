@@ -31,6 +31,21 @@ Why these numbers:
 - **Second chance is priced with Double down** because it saves a streak, which is worth more than the half points it pays.
 - **Cosmetics (100–600) stay a few days of play**, so saving for one is still a goal even after buying power-ups.
 - **Sound packs (250–450) cost less than app themes (300–600)**: you hear them, but they don't change every screen. Chimes is free; the rest are in Style shop > Sounds, with a play button per sound to try before buying. All sounds are synthesized on the phone (`SoundCatalog` in TriviaKit), so there are no audio files or licenses.
+- **Style shop prices by slot** (Sparks; free starters and earned-only items aside):
+
+  | Slot | Range | Notes |
+  |---|---|---|
+  | Avatar colors | 60–300 | solids 60–80, two-tone fades 200–220, Rainbow 300 |
+  | Avatars, emblems, stickers | 100–300 | simple symbols 100–150, flashier ones 200–300 |
+  | Borders | 150–500 | solids 150–200, dotted 250, fades 300, multi-color 400–500 |
+  | Lettering | 150–250 | |
+  | Card shapes | 200–400 | |
+  | Card backgrounds | 100–400 | solids 100, patterns 200–300, multi-color 350–400 |
+  | Finishes | 300–600 | still effects 300–400, animated 450–600 |
+  | Sound packs | 250–450 | |
+  | App themes | 300–600 | dark animated themes at the top |
+
+  Shops list each slot as free items, then for sale from cheapest to priciest, then items earned by playing (stamps and events).
 - **Stock is capped at 9 of each** so nobody hoards a huge pile and the tray badge stays one digit.
 
 Prices before this change were 20–40, which let one round buy about four power-ups, more than a round can use.

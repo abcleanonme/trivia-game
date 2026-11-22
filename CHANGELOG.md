@@ -3,6 +3,15 @@
 Player-facing notes for each TestFlight build. The current build's notes are
 also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
+## Next build
+
+STYLE SHOP
+- Lots more ways to show off your style, all bought with Sparks you earn by playing.
+- 11 new app themes, including Autumn Leaves and Matcha with falling leaves, Sweetheart and Bubblegum Pop with floating hearts, plus Deep Sea, Thunderstorm, Lantern Night and Galaxy.
+- 6 new sound packs: Kalimba, Toy Piano, Steel Drum, Bubble Pop, Crystal and Synthwave.
+- Player Card: 23 new avatars, 12 avatar colors, 12 borders, 17 backgrounds (new hearts, stars, plaid, argyle, ripples and sprinkles patterns), 15 emblems, 18 stickers, 4 letterings, 3 card shapes (postage stamp, speed slant, scooped) and 6 finishes (frost, prism, aurora glow, rose and ice shine, gold glitter).
+- The shop now lists free items first, then cheapest to priciest, then ones you earn by playing.
+
 ## 0.2.0 (8)
 
 MULTIPLAYER
