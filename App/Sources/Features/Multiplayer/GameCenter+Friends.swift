@@ -211,6 +211,12 @@ extension GameCenter {
 
     // MARK: Demo
 
+    private static func demoBoard(_ rows: [(id: String, name: String, value: Int)], me: String) -> BoardState {
+        .loaded(rows.sorted { $0.value > $1.value }.enumerated().map { rank, row in
+            BoardEntry(id: row.id, rank: rank + 1, name: row.name, value: row.value, isMe: row.id == me)
+        })
+    }
+
     func loadDemoFriends() {
         friendsAccess = .granted
         friends = [Friend(id: "jordan", name: "Jordan"), Friend(id: "maya", name: "Maya"),
@@ -229,15 +235,20 @@ extension GameCenter {
             }
             // Shuffle who leads per board so the demo looks lived in.
             let order = people.indices.map { people[($0 + i) % people.count] }
-            boards[board] = .loaded(zip(order, base).enumerated().map { rank, pair in
-                BoardEntry(id: pair.0.0, rank: rank + 1, name: pair.0.1, value: pair.1, isMe: pair.0.0 == me)
-            })
+            var rows = zip(order, base).map { (id: $0.0, name: $0.1, value: $1) }
             if board.isRecurring {
+                // Your row on the Daily and Weekly boards comes from what
+                // you've actually played, so it matches the card above it.
+                rows.removeAll { $0.id == me }
+                let mine = board == .daily
+                    ? FriendBoard.dailyScore(store.todaysDaily)
+                    : FriendBoard.weeklyScore(store.currentEventProgress)
+                if let mine { rows.append((me, localPlayerName, mine)) }
                 let earlier = people.indices.map { people[($0 + i + 2) % people.count] }
-                previousBoards[board] = .loaded(zip(earlier, base).enumerated().map { rank, pair in
-                    BoardEntry(id: pair.0.0, rank: rank + 1, name: pair.0.1, value: pair.1 - 90, isMe: pair.0.0 == me)
-                })
+                    .filter { $0.0 != me }
+                previousBoards[board] = Self.demoBoard(zip(earlier, base).map { (id: $0.0, name: $0.1, value: $1 - 90) }, me: me)
             }
+            boards[board] = Self.demoBoard(rows, me: me)
         }
     }
 }
