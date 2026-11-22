@@ -287,6 +287,55 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         }
     }
 
+    @Test func styleShopHasLotsInEverySlot() {
+        let minimums: [CosmeticSlot: Int] = [
+            .theme: 25, .sounds: 12, .avatar: 40, .border: 25, .cardShape: 9, .cardBackground: 35,
+            .emblem: 30, .avatarColor: 20, .nameStyle: 10, .sticker: 28, .finish: 12,
+        ]
+        for slot in CosmeticSlot.allCases {
+            #expect(CosmeticCatalog.items(in: slot).count >= minimums[slot] ?? 1, "\(slot)")
+        }
+    }
+
+    @Test func cardItemsStayInPriceRange() {
+        let card: [CosmeticSlot] = [.avatar, .border, .cardShape, .cardBackground, .emblem,
+                                    .avatarColor, .nameStyle, .sticker, .finish]
+        for slot in card {
+            for item in CosmeticCatalog.items(in: slot) where item.price != nil {
+                #expect((60...600).contains(item.price!), "\(item.id)")
+            }
+        }
+    }
+
+    @Test func everyCardStyleIsSold() {
+        let all = CosmeticCatalog.all
+        let patterns: [Cosmetic.Pattern] = [.solid, .stripes, .dots, .grid, .gradient, .checker, .zigzag,
+                                            .waves, .plaid, .stars, .hearts, .argyle, .sprinkles]
+        let shapes: [Cosmetic.Shape] = [.rounded, .ticket, .hexagon, .ribbon, .pill, .tag, .stamp, .slant, .scoop]
+        let letterings: [Cosmetic.Lettering] = [.classic, .rounded, .serif, .typewriter, .wide, .tall,
+                                                .sporty, .newsprint, .arcade, .whisper]
+        let finishes: [Cosmetic.Finish] = [Cosmetic.Finish.none, .gloss, .shine, .holo, .sparkle, .prism, .frost, .aurora]
+        for p in patterns { #expect(all.contains { $0.slot == .cardBackground && $0.pattern == p }, "\(p)") }
+        for s in shapes { #expect(all.contains { $0.shape == s }, "\(s)") }
+        for l in letterings { #expect(all.contains { $0.lettering == l }, "\(l)") }
+        for f in finishes { #expect(all.contains { $0.finish == f }, "\(f)") }
+    }
+
+    @Test func shopShelvesRunFreeThenCheapestThenEarned() {
+        for slot in CosmeticSlot.allCases {
+            let items = CosmeticCatalog.items(in: slot)
+            #expect(items.count == CosmeticCatalog.all.filter { $0.slot == slot }.count)
+            let prices = items.compactMap(\.price)
+            #expect(prices == prices.sorted(), "\(slot)")
+            if let firstPaid = items.firstIndex(where: { $0.price != nil }) {
+                #expect(items[..<firstPaid].allSatisfy { $0.unlock == .starter }, "\(slot)")
+            }
+            if let lastPaid = items.lastIndex(where: { $0.price != nil }) {
+                #expect(items[(lastPaid + 1)...].allSatisfy { $0.price == nil && $0.unlock != .starter }, "\(slot)")
+            }
+        }
+    }
+
     @Test func buyingAThemeEquipsIt() {
         var wallet = Wallet(sparks: 350)
         var inv = Inventory()

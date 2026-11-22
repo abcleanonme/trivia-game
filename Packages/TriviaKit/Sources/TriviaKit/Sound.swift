@@ -163,6 +163,24 @@ public enum SoundCatalog {
         // Wobbly synth sweeps.
         SoundPack(id: "sound.cosmic", voice: .init(wave: .saw, decay: 3, attack: 0.03, vibrato: 0.15),
                   custom: cosmic, gain: 0.2),
+        // Plucked metal tines: quick decay with a bright ring.
+        SoundPack(id: "sound.kalimba", voice: .init(wave: .sine, decay: 9, overtone: 0.7, attack: 0.002),
+                  custom: { _ in nil }, gain: 0.6),
+        // Plinky toy keys, a little out of a toy box.
+        SoundPack(id: "sound.toypiano", voice: .init(wave: .triangle, decay: 8, overtone: 0.25, octave: 2),
+                  custom: { _ in nil }, gain: 0.4),
+        // Steel pans: soft triangle with a shimmer.
+        SoundPack(id: "sound.steeldrum", voice: .init(wave: .triangle, decay: 4, overtone: 0.55, attack: 0.004, vibrato: 0.06),
+                  custom: { _ in nil }, gain: 0.45),
+        // Pops and bloops.
+        SoundPack(id: "sound.bubbles", voice: .init(wave: .sine, decay: 10),
+                  custom: bubbles, gain: 0.6),
+        // Ringing glass: long, pure and high.
+        SoundPack(id: "sound.glass", voice: .init(wave: .sine, decay: 2.5, overtone: 0.8, attack: 0.01, octave: 2),
+                  custom: { _ in nil }, gain: 0.45),
+        // Retro synth an octave down, with a slow swell.
+        SoundPack(id: "sound.synthwave", voice: .init(wave: .square, decay: 4, attack: 0.02, vibrato: 0.12, octave: 0.5),
+                  custom: { _ in nil }, gain: 0.22),
     ]
 
     private static let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
@@ -203,6 +221,28 @@ public enum SoundCatalog {
             return [Tone(0, 0.06, 900, wave: .sine, volume: 0.5, decay: 40, overtone: 0.6)]
         case .powerUp:
             return [whistle(0, 0.45, 300, 1500)]
+        default: return nil
+        }
+    }
+
+    private static let bubbles: @Sendable (SoundCue) -> [Tone]? = { cue in
+        func pop(_ t: Double, _ f: Double, _ v: Double = 0.8, up: Double = 1.8) -> Tone {
+            Tone(t, 0.12, f, glideTo: f * up, wave: .sine, volume: v, attack: 0.002, decay: 18)
+        }
+        switch cue {
+        case .correct:
+            return [pop(0, 500), pop(0.09, 750)]
+        case .wrong: // Sinking bloop.
+            return [Tone(0, 0.35, 420, glideTo: 160, wave: .sine, volume: 0.8, attack: 0.005, decay: 5, vibrato: 0.5)]
+        case .streak:
+            return [pop(0, 450), pop(0.07, 600), pop(0.14, 800), pop(0.21, 1050)]
+        case .tick:
+            return [pop(0, 1400, 0.4, up: 1.3)]
+        case .powerUp: // Fizz rising.
+            return [Tone(0, 0.4, 2500, wave: .noise, volume: 0.25, attack: 0.05, decay: 6)]
+                + (0..<5).map { pop(Double($0) * 0.06, 400 + Double($0) * 180, 0.6) }
+        case .purchase:
+            return [pop(0, 900), pop(0.08, 1300)]
         default: return nil
         }
     }

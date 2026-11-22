@@ -38,14 +38,14 @@ public struct Cosmetic: Identifiable, Equatable, Sendable {
         case event(String)
     }
 
-    public enum Pattern: String, Sendable { case solid, stripes, dots, grid, gradient, checker, zigzag }
-    public enum Shape: String, Sendable { case rounded, ticket, hexagon, ribbon, pill, tag }
+    public enum Pattern: String, Sendable { case solid, stripes, dots, grid, gradient, checker, zigzag, waves, plaid, stars, hearts, argyle, sprinkles }
+    public enum Shape: String, Sendable { case rounded, ticket, hexagon, ribbon, pill, tag, stamp, slant, scoop }
     /// How the name is lettered on the card.
-    public enum Lettering: String, Sendable { case classic, rounded, serif, typewriter, wide, tall }
+    public enum Lettering: String, Sendable { case classic, rounded, serif, typewriter, wide, tall, sporty, newsprint, arcade, whisper }
     /// A surface effect laid over the whole card.
-    public enum Finish: String, Sendable { case none, gloss, shine, holo, sparkle }
+    public enum Finish: String, Sendable { case none, gloss, shine, holo, sparkle, prism, frost, aurora }
     /// The ambient animation behind screens for an app theme.
-    public enum Motion: String, CaseIterable, Sendable { case drift, bubbles, waves, stars, confetti, grid, snow, rain, aurora, fireflies, petals, orbits }
+    public enum Motion: String, CaseIterable, Sendable { case drift, bubbles, waves, stars, confetti, grid, snow, rain, aurora, fireflies, petals, orbits, leaves, hearts }
 
     public let id: String
     public let slot: CosmeticSlot
@@ -78,7 +78,21 @@ public enum CosmeticCatalog {
         + avatarColors + letterings + stickers + finishes
 
     public static func item(_ id: String) -> Cosmetic? { byID[id] }
-    public static func items(in slot: CosmeticSlot) -> [Cosmetic] { all.filter { $0.slot == slot } }
+    /// A slot's items in shop order: free ones, then for sale from cheapest
+    /// to priciest, then the ones earned by playing. Ties keep catalog order.
+    public static func items(in slot: CosmeticSlot) -> [Cosmetic] { shelves[slot] ?? [] }
+
+    private static let shelves: [CosmeticSlot: [Cosmetic]] = Dictionary(grouping: all.enumerated(), by: \.element.slot)
+        .mapValues { $0.sorted { (shelfRank($0.element), $0.offset) < (shelfRank($1.element), $1.offset) }.map(\.element) }
+
+    private static func shelfRank(_ item: Cosmetic) -> Int {
+        switch item.unlock {
+        case .starter: 0
+        case .sparks(let n): n
+        case .stamp: 100_000
+        case .event: 100_001
+        }
+    }
 
     /// Equipped when nothing else is.
     public static let defaults: [CosmeticSlot: String] = [
@@ -125,6 +139,28 @@ public enum CosmeticCatalog {
                  colors: [0x120A1F, 0xC2247A], motion: .grid),
         Cosmetic(id: "theme.orbit", slot: .theme, name: "Deep Space", unlock: .sparks(600),
                  colors: [0x07081A, 0x6D3FD6], motion: .orbits),
+        Cosmetic(id: "theme.lemonade", slot: .theme, name: "Lemonade", unlock: .sparks(300),
+                 colors: [0xFFF9DB, 0x8A6100], motion: .bubbles),
+        Cosmetic(id: "theme.desert", slot: .theme, name: "Desert Dunes", unlock: .sparks(350),
+                 colors: [0xF8EEDC, 0x9C4A1E], motion: .waves),
+        Cosmetic(id: "theme.matcha", slot: .theme, name: "Matcha", unlock: .sparks(350),
+                 colors: [0xEEF3E2, 0x4A7324], motion: .leaves),
+        Cosmetic(id: "theme.autumn", slot: .theme, name: "Autumn Leaves", unlock: .sparks(400),
+                 colors: [0xFFF3E6, 0xB0471A], motion: .leaves),
+        Cosmetic(id: "theme.sweetheart", slot: .theme, name: "Sweetheart", unlock: .sparks(400),
+                 colors: [0xFFF0F2, 0xC2264B], motion: .hearts),
+        Cosmetic(id: "theme.birthday", slot: .theme, name: "Birthday Cake", unlock: .sparks(450),
+                 colors: [0xFFF6EE, 0xB8327A], motion: .confetti),
+        Cosmetic(id: "theme.bubblegum", slot: .theme, name: "Bubblegum Pop", unlock: .sparks(450),
+                 colors: [0xFFEAF6, 0xA8236F], motion: .hearts),
+        Cosmetic(id: "theme.deepsea", slot: .theme, name: "Deep Sea", unlock: .sparks(500),
+                 colors: [0x06182A, 0x1C7FB0], motion: .bubbles),
+        Cosmetic(id: "theme.storm", slot: .theme, name: "Thunderstorm", unlock: .sparks(500),
+                 colors: [0x101521, 0x4B6CB7], motion: .rain),
+        Cosmetic(id: "theme.lantern", slot: .theme, name: "Lantern Night", unlock: .sparks(550),
+                 colors: [0x1B1020, 0xC2410C], motion: .fireflies),
+        Cosmetic(id: "theme.galaxy", slot: .theme, name: "Galaxy", unlock: .sparks(600),
+                 colors: [0x120B2A, 0x8B5CF6], motion: .stars),
     ]
 
     /// Sound packs. Ids match `SoundCatalog`; every sound is synthesized
@@ -143,6 +179,18 @@ public enum CosmeticCatalog {
                  symbol: "theatermasks.fill", colors: [0xF4A100], blurb: "Boings and slide whistles"),
         Cosmetic(id: "sound.cosmic", slot: .sounds, name: "Cosmic", unlock: .sparks(450),
                  symbol: "sparkles", colors: [0x0F8A7A], blurb: "Spacey synth sweeps"),
+        Cosmetic(id: "sound.kalimba", slot: .sounds, name: "Kalimba", unlock: .sparks(250),
+                 symbol: "hand.raised.fingers.spread.fill", colors: [0x2BB3C0], blurb: "Plucked thumb-piano tines"),
+        Cosmetic(id: "sound.toypiano", slot: .sounds, name: "Toy Piano", unlock: .sparks(300),
+                 symbol: "pianokeys", colors: [0xE0554B], blurb: "Plinky little keys"),
+        Cosmetic(id: "sound.steeldrum", slot: .sounds, name: "Steel Drum", unlock: .sparks(350),
+                 symbol: "sun.max.fill", colors: [0xF4A100], blurb: "Sunny island pans"),
+        Cosmetic(id: "sound.bubbles", slot: .sounds, name: "Bubble Pop", unlock: .sparks(350),
+                 symbol: "bubbles.and.sparkles.fill", colors: [0x3B82F6], blurb: "Pops, bloops and fizz"),
+        Cosmetic(id: "sound.glass", slot: .sounds, name: "Crystal", unlock: .sparks(400),
+                 symbol: "wineglass.fill", colors: [0x8E6CEF], blurb: "Ringing glass bells"),
+        Cosmetic(id: "sound.synthwave", slot: .sounds, name: "Synthwave", unlock: .sparks(450),
+                 symbol: "waveform", colors: [0xC2247A], blurb: "Retro synth, neon vibes"),
     ]
 
     static let avatars: [Cosmetic] = [
@@ -167,6 +215,29 @@ public enum CosmeticCatalog {
         Cosmetic(id: "avatar.dice", slot: .avatar, name: "Lucky dice", unlock: .sparks(250), symbol: "dice.fill", colors: [0x17172B]),
         Cosmetic(id: "avatar.puzzle", slot: .avatar, name: "Puzzler", unlock: .sparks(300), symbol: "puzzlepiece.fill", colors: [0x3B5BFD]),
         Cosmetic(id: "avatar.flame", slot: .avatar, name: "On fire", unlock: .stamp(.tenStreak), symbol: "flame.fill", colors: [0xC2410C]),
+        Cosmetic(id: "avatar.paw", slot: .avatar, name: "Paw print", unlock: .sparks(100), symbol: "pawprint.fill", colors: [0xB0753F]),
+        Cosmetic(id: "avatar.ant", slot: .avatar, name: "Ant", unlock: .sparks(100), symbol: "ant.fill", colors: [0xC2410C]),
+        Cosmetic(id: "avatar.sun", slot: .avatar, name: "Sunny", unlock: .sparks(100), symbol: "sun.max.fill", colors: [0xF4A100]),
+        Cosmetic(id: "avatar.carrot", slot: .avatar, name: "Carrot", unlock: .sparks(100), symbol: "carrot.fill", colors: [0xF07B1F]),
+        Cosmetic(id: "avatar.heart", slot: .avatar, name: "Heart", unlock: .sparks(100), symbol: "heart.fill", colors: [0xE0554B]),
+        Cosmetic(id: "avatar.shell", slot: .avatar, name: "Shell", unlock: .sparks(150), symbol: "fossil.shell.fill", colors: [0xE0559A]),
+        Cosmetic(id: "avatar.tree", slot: .avatar, name: "Tree", unlock: .sparks(150), symbol: "tree.fill", colors: [0x15803D]),
+        Cosmetic(id: "avatar.snowflake", slot: .avatar, name: "Snowflake", unlock: .sparks(150), symbol: "snowflake", colors: [0x2563A8]),
+        Cosmetic(id: "avatar.camera", slot: .avatar, name: "Shutterbug", unlock: .sparks(150), symbol: "camera.fill", colors: [0x475569]),
+        Cosmetic(id: "avatar.tea", slot: .avatar, name: "Tea time", unlock: .sparks(150), symbol: "cup.and.saucer.fill", colors: [0x9C4A1E]),
+        Cosmetic(id: "avatar.hoops", slot: .avatar, name: "Hoops", unlock: .sparks(150), symbol: "basketball.fill", colors: [0xF07B1F]),
+        Cosmetic(id: "avatar.footy", slot: .avatar, name: "Footy", unlock: .sparks(150), symbol: "soccerball", colors: [0x17172B]),
+        Cosmetic(id: "avatar.bike", slot: .avatar, name: "Cyclist", unlock: .sparks(150), symbol: "bicycle", colors: [0x0F8A7A]),
+        Cosmetic(id: "avatar.moon", slot: .avatar, name: "Stargazer", unlock: .sparks(200), symbol: "moon.stars.fill", colors: [0x2E2E5C]),
+        Cosmetic(id: "avatar.storm", slot: .avatar, name: "Storm", unlock: .sparks(200), symbol: "cloud.bolt.fill", colors: [0x4B6CB7]),
+        Cosmetic(id: "avatar.palette", slot: .avatar, name: "Artist", unlock: .sparks(200), symbol: "paintpalette.fill", colors: [0xE0559A]),
+        Cosmetic(id: "avatar.guitar", slot: .avatar, name: "Rocker", unlock: .sparks(200), symbol: "guitars.fill", colors: [0xC2264B]),
+        Cosmetic(id: "avatar.cake", slot: .avatar, name: "Cake", unlock: .sparks(200), symbol: "birthday.cake.fill", colors: [0xE0559A]),
+        Cosmetic(id: "avatar.sailboat", slot: .avatar, name: "Sailor", unlock: .sparks(200), symbol: "sailboat.fill", colors: [0x3B82F6]),
+        Cosmetic(id: "avatar.atom", slot: .avatar, name: "Scientist", unlock: .sparks(250), symbol: "atom", colors: [0x0F8A7A]),
+        Cosmetic(id: "avatar.books", slot: .avatar, name: "Scholar", unlock: .sparks(250), symbol: "books.vertical.fill", colors: [0x9C4A1E]),
+        Cosmetic(id: "avatar.binoculars", slot: .avatar, name: "Explorer", unlock: .sparks(250), symbol: "binoculars.fill", colors: [0x4A7324]),
+        Cosmetic(id: "avatar.wizard", slot: .avatar, name: "Wizard", unlock: .sparks(300), symbol: "wand.and.stars", colors: [0x6D28D9]),
     ]
 
     static let borders: [Cosmetic] = [
@@ -185,6 +256,19 @@ public enum CosmeticCatalog {
                  colors: [0xE0554B, 0xF4A100, 0x2BC48A, 0x3B82F6, 0x8E6CEF]),
         Cosmetic(id: "border.event.animals", slot: .border, name: "Wild", unlock: .event("animals"), colors: [0x6B8E23], dashed: true),
         Cosmetic(id: "border.event.nineties", slot: .border, name: "Dial-up", unlock: .event("nineties"), colors: [0xE0559A, 0x2BB3C0]),
+        Cosmetic(id: "border.sunshine", slot: .border, name: "Sunshine", unlock: .sparks(150), colors: [0xF4A100]),
+        Cosmetic(id: "border.bubblegum", slot: .border, name: "Bubblegum", unlock: .sparks(150), colors: [0xE0559A]),
+        Cosmetic(id: "border.forest", slot: .border, name: "Forest", unlock: .sparks(150), colors: [0x15803D]),
+        Cosmetic(id: "border.silver", slot: .border, name: "Silver", unlock: .sparks(200), colors: [0x9CA3AF]),
+        Cosmetic(id: "border.candydots", slot: .border, name: "Candy dots", unlock: .sparks(250), colors: [0xE0559A], dashed: true),
+        Cosmetic(id: "border.mintdots", slot: .border, name: "Mint dots", unlock: .sparks(250), colors: [0x2BC48A], dashed: true),
+        Cosmetic(id: "border.sunset", slot: .border, name: "Sunset fade", unlock: .sparks(300), colors: [0xFF8A5B, 0xE0559A]),
+        Cosmetic(id: "border.lime", slot: .border, name: "Lime fade", unlock: .sparks(300), colors: [0xC6E84B, 0x2BC48A]),
+        Cosmetic(id: "border.neon", slot: .border, name: "Neon", unlock: .sparks(400), colors: [0xFF4FD8, 0x39D5FF]),
+        Cosmetic(id: "border.galaxy", slot: .border, name: "Galaxy", unlock: .sparks(400), colors: [0x2E2E5C, 0x8E6CEF, 0x2BB3C0]),
+        Cosmetic(id: "border.tropical", slot: .border, name: "Tropical", unlock: .sparks(400), colors: [0x2BC48A, 0xFFC93C, 0xFF6F61]),
+        Cosmetic(id: "border.pastel", slot: .border, name: "Pastel rainbow", unlock: .sparks(500),
+                 colors: [0xFF9EB5, 0xFFC98A, 0x9FE3B4, 0x9DC4FF, 0xC9A8FF]),
     ]
 
     static let shapes: [Cosmetic] = [
@@ -194,6 +278,9 @@ public enum CosmeticCatalog {
         Cosmetic(id: "shape.ribbon", slot: .cardShape, name: "Ribbon", unlock: .sparks(400), shape: .ribbon),
         Cosmetic(id: "shape.pill", slot: .cardShape, name: "Capsule", unlock: .sparks(200), shape: .pill),
         Cosmetic(id: "shape.tag", slot: .cardShape, name: "Name tag", unlock: .sparks(300), shape: .tag),
+        Cosmetic(id: "shape.slant", slot: .cardShape, name: "Speed slant", unlock: .sparks(250), shape: .slant),
+        Cosmetic(id: "shape.scoop", slot: .cardShape, name: "Scooped", unlock: .sparks(250), shape: .scoop),
+        Cosmetic(id: "shape.stamp", slot: .cardShape, name: "Postage stamp", unlock: .sparks(350), shape: .stamp),
     ]
 
     static let backgrounds: [Cosmetic] = [
@@ -217,6 +304,24 @@ public enum CosmeticCatalog {
         Cosmetic(id: "bg.event.capitals", slot: .cardBackground, name: "Atlas", unlock: .event("capitals"), colors: [0xEFE6D2, 0xB59A64], pattern: .grid),
         Cosmetic(id: "bg.event.ocean", slot: .cardBackground, name: "Tide", unlock: .event("ocean"), colors: [0xD3F1F5, 0x2BB3C0], pattern: .stripes),
         Cosmetic(id: "bg.event.food", slot: .cardBackground, name: "Picnic", unlock: .event("food"), colors: [0xFFE5E5, 0xE0554B], pattern: .grid),
+        Cosmetic(id: "bg.blush", slot: .cardBackground, name: "Blush", unlock: .sparks(100), colors: [0xFFE0EC]),
+        Cosmetic(id: "bg.seafoam", slot: .cardBackground, name: "Seafoam", unlock: .sparks(100), colors: [0xD3F1EA]),
+        Cosmetic(id: "bg.butter", slot: .cardBackground, name: "Butter", unlock: .sparks(100), colors: [0xFFF0B3]),
+        Cosmetic(id: "bg.cloud", slot: .cardBackground, name: "Cloud", unlock: .sparks(100), colors: [0xE8ECF3]),
+        Cosmetic(id: "bg.polka", slot: .cardBackground, name: "Polka", unlock: .sparks(200), colors: [0xFFE0EC, 0xE0559A], pattern: .dots),
+        Cosmetic(id: "bg.candycane", slot: .cardBackground, name: "Candy cane", unlock: .sparks(250), colors: [0xFFFFFF, 0xE0554B], pattern: .stripes),
+        Cosmetic(id: "bg.ripples", slot: .cardBackground, name: "Ripples", unlock: .sparks(250), colors: [0xD6E4FF, 0x3B82F6], pattern: .waves),
+        Cosmetic(id: "bg.cotton", slot: .cardBackground, name: "Cotton candy", unlock: .sparks(250), colors: [0xFFC2D9, 0xD6E4FF], pattern: .gradient),
+        Cosmetic(id: "bg.citrus", slot: .cardBackground, name: "Citrus", unlock: .sparks(250), colors: [0xFFF4CC, 0xFFD9C2], pattern: .gradient),
+        Cosmetic(id: "bg.hearts", slot: .cardBackground, name: "Hearts", unlock: .sparks(300), colors: [0xFFF0F2, 0xE0554B], pattern: .hearts),
+        Cosmetic(id: "bg.starry", slot: .cardBackground, name: "Starry", unlock: .sparks(300), colors: [0xE9E4FF, 0x8E6CEF], pattern: .stars),
+        Cosmetic(id: "bg.flannel", slot: .cardBackground, name: "Flannel", unlock: .sparks(300), colors: [0xFFE5E5, 0xC2264B], pattern: .plaid),
+        Cosmetic(id: "bg.argyle", slot: .cardBackground, name: "Argyle", unlock: .sparks(300), colors: [0xE6F7EF, 0x0E7A54], pattern: .argyle),
+        Cosmetic(id: "bg.surf", slot: .cardBackground, name: "Surf", unlock: .sparks(300), colors: [0xE0F2FE, 0x2BB3C0], pattern: .zigzag),
+        Cosmetic(id: "bg.sorbet", slot: .cardBackground, name: "Sorbet", unlock: .sparks(350), colors: [0xFFD9C2, 0xE9E4FF, 0xCFF5E4], pattern: .gradient),
+        Cosmetic(id: "bg.sprinkles", slot: .cardBackground, name: "Sprinkles", unlock: .sparks(350),
+                 colors: [0xFFF6EE, 0xE0559A, 0x3B82F6, 0xF4A100, 0x2BC48A], pattern: .sprinkles),
+        Cosmetic(id: "bg.nightsky", slot: .cardBackground, name: "Night sky", unlock: .sparks(400), colors: [0xDCE3FF, 0x2E2E5C], pattern: .stars),
     ]
 
     static let emblems: [Cosmetic] = [
@@ -238,6 +343,21 @@ public enum CosmeticCatalog {
         Cosmetic(id: "emblem.event.retro", slot: .emblem, name: "Joystick", unlock: .event("retro"), symbol: "gamecontroller.fill"),
         Cosmetic(id: "emblem.event.football", slot: .emblem, name: "Golden Boot", unlock: .event("football"), symbol: "soccerball"),
         Cosmetic(id: "emblem.event.thanksgiving", slot: .emblem, name: "Harvest Leaf", unlock: .event("thanksgiving"), symbol: "leaf.fill"),
+        Cosmetic(id: "emblem.heart", slot: .emblem, name: "Heart", unlock: .sparks(100), symbol: "heart.fill"),
+        Cosmetic(id: "emblem.paint", slot: .emblem, name: "Artist", unlock: .sparks(150), symbol: "paintbrush.fill"),
+        Cosmetic(id: "emblem.masks", slot: .emblem, name: "Stage", unlock: .sparks(150), symbol: "theatermasks.fill"),
+        Cosmetic(id: "emblem.paw", slot: .emblem, name: "Animal lover", unlock: .sparks(150), symbol: "pawprint.fill"),
+        Cosmetic(id: "emblem.food", slot: .emblem, name: "Foodie", unlock: .sparks(150), symbol: "fork.knife"),
+        Cosmetic(id: "emblem.sports", slot: .emblem, name: "Sporty", unlock: .sparks(150), symbol: "sportscourt.fill"),
+        Cosmetic(id: "emblem.bolt", slot: .emblem, name: "Lightning", unlock: .sparks(150), symbol: "bolt.fill"),
+        Cosmetic(id: "emblem.plane", slot: .emblem, name: "Globetrotter", unlock: .sparks(200), symbol: "airplane"),
+        Cosmetic(id: "emblem.puzzle", slot: .emblem, name: "Puzzler", unlock: .sparks(200), symbol: "puzzlepiece.fill"),
+        Cosmetic(id: "emblem.dice", slot: .emblem, name: "High roller", unlock: .sparks(200), symbol: "dice.fill"),
+        Cosmetic(id: "emblem.sparkles", slot: .emblem, name: "Magic", unlock: .sparks(200), symbol: "sparkles"),
+        Cosmetic(id: "emblem.hourglass", slot: .emblem, name: "Timekeeper", unlock: .sparks(200), symbol: "hourglass"),
+        Cosmetic(id: "emblem.grad", slot: .emblem, name: "Graduate", unlock: .sparks(250), symbol: "graduationcap.fill"),
+        Cosmetic(id: "emblem.thinker", slot: .emblem, name: "Big thinker", unlock: .sparks(250), symbol: "brain.head.profile"),
+        Cosmetic(id: "emblem.medal", slot: .emblem, name: "Medalist", unlock: .sparks(300), symbol: "medal.fill"),
     ]
 
     /// Recolors the avatar circle. "Auto" keeps each avatar's own color.
@@ -252,6 +372,19 @@ public enum CosmeticCatalog {
         Cosmetic(id: "color.gold", slot: .avatarColor, name: "Gold", unlock: .sparks(120), colors: [0xC9A227]),
         Cosmetic(id: "color.sunrise", slot: .avatarColor, name: "Sunrise", unlock: .sparks(200), colors: [0xFF8A5B, 0xE0559A]),
         Cosmetic(id: "color.galaxy", slot: .avatarColor, name: "Galaxy", unlock: .sparks(250), colors: [0x2E2E5C, 0x8E6CEF]),
+        Cosmetic(id: "color.sky", slot: .avatarColor, name: "Sky", unlock: .sparks(60), colors: [0x3B82F6]),
+        Cosmetic(id: "color.teal", slot: .avatarColor, name: "Teal", unlock: .sparks(60), colors: [0x0F8A7A]),
+        Cosmetic(id: "color.tangerine", slot: .avatarColor, name: "Tangerine", unlock: .sparks(60), colors: [0xF07B1F]),
+        Cosmetic(id: "color.slate", slot: .avatarColor, name: "Slate", unlock: .sparks(60), colors: [0x475569]),
+        Cosmetic(id: "color.cherry", slot: .avatarColor, name: "Cherry", unlock: .sparks(80), colors: [0xC2264B]),
+        Cosmetic(id: "color.forest", slot: .avatarColor, name: "Forest", unlock: .sparks(80), colors: [0x15803D]),
+        Cosmetic(id: "color.plum", slot: .avatarColor, name: "Plum", unlock: .sparks(80), colors: [0x6D28D9]),
+        Cosmetic(id: "color.ocean", slot: .avatarColor, name: "Ocean", unlock: .sparks(200), colors: [0x2BB3C0, 0x3B5BFD]),
+        Cosmetic(id: "color.rosegold", slot: .avatarColor, name: "Rose gold", unlock: .sparks(220), colors: [0xE8A598, 0xC9A227]),
+        Cosmetic(id: "color.lava", slot: .avatarColor, name: "Lava", unlock: .sparks(220), colors: [0xC2410C, 0xE0379A]),
+        Cosmetic(id: "color.mermaid", slot: .avatarColor, name: "Mermaid", unlock: .sparks(220), colors: [0x2BC48A, 0x8E6CEF]),
+        Cosmetic(id: "color.rainbow", slot: .avatarColor, name: "Rainbow", unlock: .sparks(300),
+                 colors: [0xE0554B, 0xF4A100, 0x2BC48A, 0x3B82F6, 0x8E6CEF]),
     ]
 
     static let letterings: [Cosmetic] = [
@@ -261,6 +394,10 @@ public enum CosmeticCatalog {
         Cosmetic(id: "letter.typewriter", slot: .nameStyle, name: "Typewriter", unlock: .sparks(150), lettering: .typewriter),
         Cosmetic(id: "letter.wide", slot: .nameStyle, name: "Billboard", unlock: .sparks(200), lettering: .wide),
         Cosmetic(id: "letter.tall", slot: .nameStyle, name: "Marquee", unlock: .sparks(200), lettering: .tall),
+        Cosmetic(id: "letter.sporty", slot: .nameStyle, name: "Sporty", unlock: .sparks(150), lettering: .sporty),
+        Cosmetic(id: "letter.whisper", slot: .nameStyle, name: "Whisper", unlock: .sparks(150), lettering: .whisper),
+        Cosmetic(id: "letter.newsprint", slot: .nameStyle, name: "Headline", unlock: .sparks(200), lettering: .newsprint),
+        Cosmetic(id: "letter.arcade", slot: .nameStyle, name: "Arcade", unlock: .sparks(250), lettering: .arcade),
     ]
 
     /// A tilted sticker slapped on the card's bottom corner.
@@ -276,6 +413,24 @@ public enum CosmeticCatalog {
         Cosmetic(id: "sticker.brain", slot: .sticker, name: "Big brain", unlock: .sparks(200), symbol: "brain.fill", colors: [0xE0559A]),
         Cosmetic(id: "sticker.thumbs", slot: .sticker, name: "Thumbs up", unlock: .sparks(200), symbol: "hand.thumbsup.fill", colors: [0x2BC48A]),
         Cosmetic(id: "sticker.perfect", slot: .sticker, name: "100%", unlock: .stamp(.perfectRound), symbol: "checkmark.seal.fill", colors: [0x15803D]),
+        Cosmetic(id: "sticker.leaf", slot: .sticker, name: "Leaf", unlock: .sparks(100), symbol: "leaf.fill", colors: [0x2BC48A]),
+        Cosmetic(id: "sticker.sun", slot: .sticker, name: "Sunshine", unlock: .sparks(100), symbol: "sun.max.fill", colors: [0xF4A100]),
+        Cosmetic(id: "sticker.paw", slot: .sticker, name: "Paw print", unlock: .sparks(120), symbol: "pawprint.fill", colors: [0xB0753F]),
+        Cosmetic(id: "sticker.cat", slot: .sticker, name: "Kitty", unlock: .sparks(120), symbol: "cat.fill", colors: [0xFF8A5B]),
+        Cosmetic(id: "sticker.music", slot: .sticker, name: "Tune", unlock: .sparks(120), symbol: "music.note", colors: [0x8E6CEF]),
+        Cosmetic(id: "sticker.snowflake", slot: .sticker, name: "Snowflake", unlock: .sparks(120), symbol: "snowflake", colors: [0x3B82F6]),
+        Cosmetic(id: "sticker.idea", slot: .sticker, name: "Idea", unlock: .sparks(120), symbol: "lightbulb.fill", colors: [0xF4A100]),
+        Cosmetic(id: "sticker.flame", slot: .sticker, name: "Hot streak", unlock: .sparks(150), symbol: "flame.fill", colors: [0xC2410C]),
+        Cosmetic(id: "sticker.moon", slot: .sticker, name: "Night owl", unlock: .sparks(150), symbol: "moon.stars.fill", colors: [0x2E2E5C]),
+        Cosmetic(id: "sticker.game", slot: .sticker, name: "Gamer", unlock: .sparks(150), symbol: "gamecontroller.fill", colors: [0x7C3AED]),
+        Cosmetic(id: "sticker.balloon", slot: .sticker, name: "Balloon", unlock: .sparks(150), symbol: "balloon.fill", colors: [0xE0554B]),
+        Cosmetic(id: "sticker.gift", slot: .sticker, name: "Gift", unlock: .sparks(150), symbol: "gift.fill", colors: [0xE0559A]),
+        Cosmetic(id: "sticker.globe", slot: .sticker, name: "Globe", unlock: .sparks(150), symbol: "globe.americas.fill", colors: [0x2BB3C0]),
+        Cosmetic(id: "sticker.plane", slot: .sticker, name: "Jet set", unlock: .sparks(150), symbol: "airplane", colors: [0x3B5BFD]),
+        Cosmetic(id: "sticker.cake", slot: .sticker, name: "Cake", unlock: .sparks(180), symbol: "birthday.cake.fill", colors: [0xE0559A]),
+        Cosmetic(id: "sticker.atom", slot: .sticker, name: "Atom", unlock: .sparks(180), symbol: "atom", colors: [0x0F8A7A]),
+        Cosmetic(id: "sticker.crown", slot: .sticker, name: "Crown", unlock: .sparks(250), symbol: "crown.fill", colors: [0xC9A227]),
+        Cosmetic(id: "sticker.trophy", slot: .sticker, name: "Trophy", unlock: .sparks(250), symbol: "trophy.fill", colors: [0xF4A100]),
     ]
 
     /// Surface effects. The priciest card items: they're the flashiest.
@@ -286,6 +441,12 @@ public enum CosmeticCatalog {
         Cosmetic(id: "finish.sparkle", slot: .finish, name: "Glitter", unlock: .sparks(500), finish: .sparkle),
         Cosmetic(id: "finish.holo", slot: .finish, name: "Holo", unlock: .sparks(600), finish: .holo),
         Cosmetic(id: "finish.foil", slot: .finish, name: "Gold foil", unlock: .stamp(.dailyStreak(100)), colors: [0xC9A227], finish: .shine),
+        Cosmetic(id: "finish.frost", slot: .finish, name: "Frost", unlock: .sparks(350), finish: .frost),
+        Cosmetic(id: "finish.prism", slot: .finish, name: "Prism", unlock: .sparks(400), finish: .prism),
+        Cosmetic(id: "finish.roseshine", slot: .finish, name: "Rose shine", unlock: .sparks(450), colors: [0xF7A1C4], finish: .shine),
+        Cosmetic(id: "finish.iceshine", slot: .finish, name: "Ice shine", unlock: .sparks(450), colors: [0x9DE7FF], finish: .shine),
+        Cosmetic(id: "finish.goldglitter", slot: .finish, name: "Gold glitter", unlock: .sparks(550), colors: [0xFFC93C], finish: .sparkle),
+        Cosmetic(id: "finish.aurora", slot: .finish, name: "Aurora glow", unlock: .sparks(550), finish: .aurora),
     ]
 }
 

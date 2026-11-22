@@ -132,8 +132,8 @@ struct PlayerCardView: View {
 
     private var horizontalPadding: CGFloat {
         switch look.shape.shape ?? .rounded {
-        case .hexagon, .ribbon, .pill: 40
-        case .ticket, .tag: 30
+        case .hexagon, .ribbon, .pill, .slant: 40
+        case .ticket, .tag, .stamp, .scoop: 30
         case .rounded: 20
         }
     }
@@ -148,6 +148,10 @@ enum NameLettering {
         case .typewriter: .system(style, design: .monospaced, weight: .semibold)
         case .wide: .system(style, weight: .heavy).width(.expanded)
         case .tall: .system(style, weight: .black).width(.compressed)
+        case .sporty: .system(style, weight: .black).italic()
+        case .newsprint: .system(style, design: .serif, weight: .black)
+        case .arcade: .system(style, design: .monospaced, weight: .black)
+        case .whisper: .system(style, design: .rounded, weight: .medium).width(.expanded)
         }
     }
 }
@@ -251,6 +255,37 @@ struct CardFinishOverlay: View {
                     .opacity(0.28)
                     .blendMode(.overlay)
             }
+        case .prism:
+            // Still rainbow wash, like light through a prism.
+            LinearGradient(colors: [.pink, .orange, .yellow, .mint, .cyan, .purple],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                .opacity(0.22)
+                .blendMode(.overlay)
+                .allowsHitTesting(false)
+        case .frost:
+            // Icy edges with a few still flakes.
+            ZStack {
+                LinearGradient(colors: [.white.opacity(0.6), .white.opacity(0), .white.opacity(0.45)],
+                               startPoint: .top, endPoint: .bottom)
+                Canvas { ctx, size in
+                    for i in 0..<18 {
+                        let fx = CGFloat((i * 43) % 100) / 100, fy = CGFloat((i * 71) % 100) / 100
+                        let r = CGFloat(1 + (i % 3))
+                        ctx.fill(Path(ellipseIn: CGRect(x: fx * size.width, y: fy * size.height, width: r * 2, height: r * 2)),
+                                 with: .color(.white.opacity(0.7)))
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        case .aurora:
+            moving(period: 8) { t, size in
+                let shift = sin(t * 2 * .pi)
+                LinearGradient(colors: [Color(hex: 0x3BE8B0), Color(hex: 0x6C7CFF), Color(hex: 0xC86BFA), Color(hex: 0x3BE8B0)],
+                               startPoint: UnitPoint(x: 0.5 * shift, y: 0), endPoint: UnitPoint(x: 1 + 0.5 * shift, y: 1))
+                    .opacity(0.3)
+                    .blendMode(.overlay)
+                    .frame(width: size.width, height: size.height)
+            }
         case .sparkle:
             moving(period: 2.4) { t, _ in
                 Canvas { ctx, size in
@@ -269,13 +304,16 @@ struct CardFinishOverlay: View {
                         cross.move(to: CGPoint(x: c.x - r * 1.6, y: c.y)); cross.addLine(to: CGPoint(x: c.x, y: c.y - r * 0.4))
                         cross.addLine(to: CGPoint(x: c.x + r * 1.6, y: c.y)); cross.addLine(to: CGPoint(x: c.x, y: c.y + r * 0.4))
                         cross.closeSubpath()
-                        ctx.fill(star, with: .color(.white.opacity(a)))
-                        ctx.fill(cross, with: .color(.white.opacity(a)))
+                        ctx.fill(star, with: .color(glitter.opacity(a)))
+                        ctx.fill(cross, with: .color(glitter.opacity(a)))
                     }
                 }
             }
         }
     }
+
+    /// Glitter color: white unless the finish has its own tint.
+    private var glitter: Color { finish.colors.first.map { Color(hex: $0) } ?? .white }
 
     /// Drives `content` with a 0...1 phase, capped at 30 fps; a still frame
     /// with Reduce Motion.
@@ -359,10 +397,88 @@ struct CardPattern: View {
                     }
                 }
                 ctx.stroke(path, with: .color(ink), lineWidth: 2.5)
+            case .waves:
+                var path = Path()
+                for y in stride(from: CGFloat(10), to: size.height + 10, by: 16) {
+                    path.move(to: CGPoint(x: 0, y: y))
+                    for x in stride(from: CGFloat(0), through: size.width, by: 4) {
+                        path.addLine(to: CGPoint(x: x, y: y + sin(x / 12) * 3))
+                    }
+                }
+                ctx.stroke(path, with: .color(ink), lineWidth: 2)
+            case .plaid:
+                // Wide soft bands both ways, with thin lines between.
+                var bands = Path(), lines = Path()
+                for x in stride(from: CGFloat(0), to: size.width, by: 36) {
+                    bands.addRect(CGRect(x: x, y: 0, width: 14, height: size.height))
+                    lines.move(to: CGPoint(x: x + 24, y: 0)); lines.addLine(to: CGPoint(x: x + 24, y: size.height))
+                }
+                for y in stride(from: CGFloat(0), to: size.height, by: 36) {
+                    bands.addRect(CGRect(x: 0, y: y, width: size.width, height: 14))
+                    lines.move(to: CGPoint(x: 0, y: y + 24)); lines.addLine(to: CGPoint(x: size.width, y: y + 24))
+                }
+                ctx.fill(bands, with: .color(ink.opacity(0.45)))
+                ctx.stroke(lines, with: .color(ink), lineWidth: 1)
+            case .stars:
+                for (i, x) in stride(from: CGFloat(10), to: size.width, by: 26).enumerated() {
+                    for (j, y) in stride(from: CGFloat(10), to: size.height, by: 26).enumerated() {
+                        let c = CGPoint(x: x + ((j % 2 == 0) ? 0 : 13), y: y)
+                        let r: CGFloat = (i + j) % 3 == 0 ? 5 : 3.5
+                        ctx.fill(Self.star(at: c, radius: r), with: .color(ink))
+                    }
+                }
+            case .hearts:
+                for x in stride(from: CGFloat(12), to: size.width, by: 28) {
+                    for (j, y) in stride(from: CGFloat(12), to: size.height + 10, by: 24).enumerated() {
+                        var heart = ctx
+                        heart.translateBy(x: x + ((j % 2 == 0) ? 0 : 14), y: y)
+                        heart.fill(BackgroundPainter.heart(width: 10), with: .color(ink))
+                    }
+                }
+            case .argyle:
+                let w: CGFloat = 28, h: CGFloat = 36
+                var diamonds = Path()
+                for (i, x) in stride(from: CGFloat(0), to: size.width + w, by: w).enumerated() {
+                    for (j, y) in stride(from: CGFloat(0), to: size.height + h, by: h).enumerated() where (i + j) % 2 == 0 {
+                        diamonds.move(to: CGPoint(x: x, y: y - h / 2))
+                        diamonds.addLine(to: CGPoint(x: x + w / 2, y: y))
+                        diamonds.addLine(to: CGPoint(x: x, y: y + h / 2))
+                        diamonds.addLine(to: CGPoint(x: x - w / 2, y: y))
+                        diamonds.closeSubpath()
+                    }
+                }
+                ctx.fill(diamonds, with: .color(ink.opacity(0.5)))
+            case .sprinkles:
+                // Short tilted dashes in every color after the base.
+                let inks = background.colors.dropFirst().map { Color(hex: $0).opacity(0.75) }
+                for i in 0..<60 where !inks.isEmpty {
+                    let x = CGFloat((i * 37) % 101) / 101 * size.width
+                    let y = CGFloat((i * 59) % 97) / 97 * size.height
+                    let angle = Double((i * 47) % 180) * .pi / 180
+                    var p = Path()
+                    p.move(to: CGPoint(x: x - 4 * cos(angle), y: y - 4 * sin(angle)))
+                    p.addLine(to: CGPoint(x: x + 4 * cos(angle), y: y + 4 * sin(angle)))
+                    ctx.stroke(p, with: .color(inks[i % inks.count]), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                }
             case .gradient:
                 break
             }
         }
+    }
+}
+
+extension CardPattern {
+    /// A five-point star centered on `c`.
+    static func star(at c: CGPoint, radius r: CGFloat) -> Path {
+        var p = Path()
+        for k in 0..<10 {
+            let a = Double(k) * .pi / 5 - .pi / 2
+            let len = k % 2 == 0 ? r : r * 0.45
+            let pt = CGPoint(x: c.x + len * cos(a), y: c.y + len * sin(a))
+            if k == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        return p
     }
 }
 
@@ -417,6 +533,40 @@ struct CardShape: Shape {
             p.addLine(to: CGPoint(x: r.minX, y: r.minY + c))
             p.closeSubpath()
             return p
+        case .stamp:
+            // Postage stamp: small round bites all the way around the edge.
+            let bite: CGFloat = 5, step: CGFloat = 16
+            var p = Rectangle().path(in: r)
+            var holes = Path()
+            for x in stride(from: r.minX + step / 2, to: r.maxX, by: step) {
+                holes.addEllipse(in: CGRect(x: x - bite, y: r.minY - bite, width: bite * 2, height: bite * 2))
+                holes.addEllipse(in: CGRect(x: x - bite, y: r.maxY - bite, width: bite * 2, height: bite * 2))
+            }
+            for y in stride(from: r.minY + step / 2, to: r.maxY, by: step) {
+                holes.addEllipse(in: CGRect(x: r.minX - bite, y: y - bite, width: bite * 2, height: bite * 2))
+                holes.addEllipse(in: CGRect(x: r.maxX - bite, y: y - bite, width: bite * 2, height: bite * 2))
+            }
+            p = p.subtracting(holes)
+            return p
+        case .slant:
+            // Leaning parallelogram, like it's moving fast.
+            let lean = min(r.height * 0.3, 24)
+            var p = Path()
+            p.move(to: CGPoint(x: r.minX + lean, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX - lean, y: r.maxY))
+            p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+            p.closeSubpath()
+            return p
+        case .scoop:
+            // Corners scooped inward, like a vintage label.
+            let s = min(r.height * 0.2, 16)
+            var corners = Path()
+            for c in [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY),
+                      CGPoint(x: r.minX, y: r.maxY), CGPoint(x: r.maxX, y: r.maxY)] {
+                corners.addEllipse(in: CGRect(x: c.x - s, y: c.y - s, width: s * 2, height: s * 2))
+            }
+            return Rectangle().path(in: r).subtracting(corners)
         }
     }
 }

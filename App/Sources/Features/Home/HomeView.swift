@@ -6,6 +6,8 @@ struct HomeView: View {
     @AppStorage(SettingKey.relaxedMode) private var relaxedMode = false
     @AppStorage(SettingKey.gameMode) private var mode: GameMode = .classic
     @AppStorage(SettingKey.difficulty) private var difficulty: Difficulty = .mixed
+    @AppStorage(SettingKey.categoryPicks) private var savedPicks = ""
+    @State private var showAllCategories = false
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var round: RoundRequest?
     /// Keeps category names lined up while the icon grows with Dynamic Type.
@@ -38,7 +40,7 @@ struct HomeView: View {
         #if DEBUG
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-autoplaySummary"), round == nil {
-                round = request(category: nil)
+                round = request()
             }
         }
         #endif
@@ -74,7 +76,7 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: Space.m) {
             layout {
                 VStack(alignment: .leading, spacing: Space.xs) {
-                    Text(relaxedApplies ? "\(mode.title) · Relaxed" : mode.title)
+                    Text(eyebrow)
                         .eyebrow()
                         .opacity(0.9)
                     Text(headline)
@@ -112,7 +114,7 @@ struct HomeView: View {
 
     private var playButton: some View {
         Button {
-            round = request(category: nil)
+            round = request()
         } label: {
             Label("Play", systemImage: "play.fill")
                 .font(.title3.bold())
@@ -120,26 +122,68 @@ struct HomeView: View {
                 .frame(minHeight: 52)
         }
         .buttonStyle(.chunky(fill: Theme.spark, foreground: Theme.onSpark, capsule: true))
-        .accessibilityHint("Starts a \(mode.title) round")
+        .accessibilityHint("Starts a \(mode.title) round\(topic.map { " of \($0) questions" } ?? "")")
     }
 
     private var categoryColumns: [GridItem] {
-        // Three tiles across fits 14 categories in five short rows. Large
-        // text gets two (or one) wider columns so names don't truncate.
+        // Three tiles across. Large text gets two (or one) wider columns so
+        // names don't truncate.
         let count = typeSize.isAccessibilitySize ? 1 : (typeSize > .xxLarge ? 2 : 3)
         return Array(repeating: GridItem(.flexible(), spacing: Space.s), count: count)
     }
 
+    /// Picked categories, in Home's order, limited to ones still offered.
+    private var picks: [String] {
+        let offered = Set(store.bank.playableCategories)
+        return ChallengeSetup.ordered(savedPicks.split(separator: "|").map(String.init).filter(offered.contains))
+    }
+
+    private func setPicks(_ new: [String]) {
+        savedPicks = ChallengeSetup.ordered(new).joined(separator: "|")
+    }
+
+    private var topic: String? { ChallengeSetup.topicSummary(picks) }
+
+    /// Tiles shown before "All categories" (three rows), so Home still fits
+    /// on one screen on small phones.
+    private static let collapsedCount = 9
+
+    /// The tiles on show: the first few, plus any picked further down, or
+    /// every category once expanded.
+    private var shownCategories: [String] {
+        let all = store.bank.playableCategories
+        guard !showAllCategories, all.count > Self.collapsedCount + 1 else { return all }
+        let first = Array(all.prefix(Self.collapsedCount))
+        return first + all.dropFirst(Self.collapsedCount).filter(picks.contains)
+    }
+
     private var categories: some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            SectionLabel("Category focus")
+        let picked = picks
+        let all = store.bank.playableCategories
+        return VStack(alignment: .leading, spacing: Space.s) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel(picked.isEmpty ? "Category focus" : "Category focus · \(picked.count) picked")
+                Spacer()
+                if !picked.isEmpty {
+                    Button("Clear") { setPicks([]) }
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Theme.accent)
+                        .accessibilityHint("Goes back to a mixed round")
+                }
+            }
+            Text(picked.isEmpty ? "Tap one or more, then Play. None picked plays a mix." : "Play draws only from these.")
+                .font(.caption)
+                .foregroundStyle(Theme.muted)
             LazyVGrid(columns: categoryColumns, spacing: Space.s) {
-                ForEach(store.bank.categories, id: \.self) { category in
-                    Button { round = request(category: category) } label: {
+                ForEach(shownCategories, id: \.self) { category in
+                    let on = picked.contains(category)
+                    Button {
+                        setPicks(on ? picked.filter { $0 != category } : picked + [category])
+                    } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: CategoryStyle.symbol(for: category))
+                            Image(systemName: on ? "checkmark" : CategoryStyle.symbol(for: category))
                                 .font(.footnote.weight(.bold))
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(on ? .white : Theme.accent)
                                 .frame(width: iconWidth)
                                 .accessibilityHidden(true)
                             Text(category)
@@ -150,24 +194,46 @@ struct HomeView: View {
                         .padding(.horizontal, Space.s)
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
-                    .buttonStyle(ChunkyButtonStyle(fill: Theme.card,
+                    .buttonStyle(ChunkyButtonStyle(fill: on ? Theme.accent : Theme.card,
+                                                   foreground: on ? .white : Theme.ink,
                                                    shape: AnyShape(RoundedRectangle(cornerRadius: 14, style: .continuous)),
-                                                   depth: 3))
-                    .accessibilityHint("Starts a \(mode.title) round of \(category) questions")
+                                                   depth: on ? 2 : 3))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                    .accessibilityHint(on ? "Removes \(category) from the round" : "Adds \(category) to the round")
                 }
+            }
+            if all.count > Self.collapsedCount + 1 {
+                Button {
+                    withAnimation(.snappy) { showAllCategories.toggle() }
+                } label: {
+                    Label(showAllCategories ? "Fewer categories" : "All \(all.count) categories",
+                          systemImage: showAllCategories ? "chevron.up" : "chevron.down")
+                        .font(.footnote.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(ChunkyButtonStyle(fill: Theme.card, foreground: Theme.accent,
+                                               shape: AnyShape(Theme.pill), depth: 2))
             }
         }
     }
 
-    private func request(category: String?) -> RoundRequest {
-        RoundRequest(kind: .solo(mode: mode, category: category, difficulty: difficulty))
+    private func request() -> RoundRequest {
+        RoundRequest(kind: .solo(mode: mode, categories: picks, difficulty: difficulty))
+    }
+
+    /// "Classic", "Classic · Relaxed", "Classic · Science & Art".
+    private var eyebrow: String {
+        var parts = [mode.title]
+        if relaxedApplies { parts.append("Relaxed") }
+        if let topic { parts.append(topic) }
+        return parts.joined(separator: " · ")
     }
 
     private var relaxedApplies: Bool { relaxedMode && mode.supportsRelaxed }
 
     private var headline: String {
         switch mode {
-        case .classic: "10 questions.\n\(difficulty == .mixed ? "Mixed bag." : "\(difficulty.title) ones.")"
+        case .classic: "10 questions.\n\(difficulty == .mixed ? (picks.isEmpty ? "Mixed bag." : "Your picks.") : "\(difficulty.title) ones.")"
         case .survival: "Three lives.\nHow far can you go?"
         case .speed: "60 seconds.\nGo go go."
         }

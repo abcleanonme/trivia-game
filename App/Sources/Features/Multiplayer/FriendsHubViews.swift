@@ -3,17 +3,21 @@ import TriviaKit
 
 // MARK: Leaderboards
 
-/// Friends-only rankings: today's Daily first, then lifetime stats.
+/// Friends-only rankings for lifetime stats. The Daily and Weekly boards
+/// live on their own tabs.
 struct FriendBoardsView: View {
     @Environment(GameCenter.self) private var gameCenter
-    @SceneStorage("friends.board") private var board: FriendBoard = .daily
+    @SceneStorage("friends.board") private var stored: FriendBoard = .streak
+
+    /// Older builds could remember the Daily board here.
+    private var board: FriendBoard { FriendBoard.lifetime.contains(stored) ? stored : .streak }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             FlowLayout(spacing: 6) {
-                ForEach(FriendBoard.allCases) { b in
+                ForEach(FriendBoard.lifetime) { b in
                     let on = b == board
-                    Button { board = b } label: {
+                    Button { stored = b } label: {
                         Label(b.shortTitle, systemImage: b.systemImage)
                             .labelStyle(CompactLabelStyle())
                             .font(.footnote.weight(.bold))
@@ -33,13 +37,22 @@ struct FriendBoardsView: View {
             }
             .foregroundStyle(Theme.ink)
 
-            content
+            BoardContent(state: gameCenter.boardState(board), board: board,
+                         emptyMessage: "No friends on this board yet. Challenge someone, and they'll show up once they play.")
         }
         .task(id: board) { await gameCenter.loadBoard(board) }
     }
+}
 
-    @ViewBuilder private var content: some View {
-        switch gameCenter.boards[board] {
+/// A loaded board's rows, or its loading, error or empty state.
+struct BoardContent: View {
+    let state: BoardState?
+    let board: FriendBoard
+    /// Shown when no friends have a score yet.
+    let emptyMessage: String
+
+    var body: some View {
+        switch state {
         case nil, .loading?:
             ProgressView().frame(maxWidth: .infinity).padding(.vertical, Space.xl)
         case .failed(let message)?:
@@ -55,9 +68,7 @@ struct FriendBoardsView: View {
                     if let me = entries.first(where: \.isMe) {
                         Text("You: \(board.format(me.value))").font(.headline)
                     }
-                    Text(board.isDaily
-                         ? "None of your friends have posted today's Daily yet. Play it and share your card to get them going."
-                         : "No friends on this board yet. Challenge someone, and they'll show up once they play.")
+                    Text(emptyMessage)
                         .font(.subheadline)
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -73,7 +84,7 @@ struct FriendBoardsView: View {
     }
 }
 
-private struct BoardRow: View {
+struct BoardRow: View {
     let entry: BoardEntry
     let board: FriendBoard
 
@@ -496,8 +507,6 @@ struct ChallengeSetupSheet: View {
     @Environment(PlayerStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    private static let mixed = "Mixed"
-
     var body: some View {
         @Bindable var gameCenter = gameCenter
         NavigationStack {
@@ -544,11 +553,12 @@ struct ChallengeSetupSheet: View {
                     .card()
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        SectionLabel("Category")
-                        OptionRow(label: "Topic", options: [Self.mixed] + store.bank.categories,
-                                  selection: Binding(get: { gameCenter.nextSetup.category ?? Self.mixed },
-                                                     set: { gameCenter.nextSetup.category = $0 == Self.mixed ? nil : $0 }),
-                                  title: \.self, inverted: true)
+                        SectionLabel("Categories")
+                        Text("Pick as many as you like, or Mixed for everything.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.muted)
+                        CategoryChips(categories: store.bank.playableCategories,
+                                      selection: $gameCenter.nextSetup.categories)
                     }
                     .padding(Theme.cardPadding)
                     .card()

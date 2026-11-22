@@ -120,6 +120,8 @@ final class GameCenter: NSObject {
     var friends: [Friend] = []
     var friendsAccess: FriendsAccess = .unknown
     var boards: [FriendBoard: BoardState] = [:]
+    /// Yesterday's Daily and last week's event (recurring boards only).
+    var previousBoards: [FriendBoard: BoardState] = [:]
     private(set) var isLoading = false
     /// Drives the full-screen challenge cover.
     var activeRound: ChallengeRound?
@@ -1023,7 +1025,7 @@ private extension GameCenter {
             ("maya", "Maya", .won, 1_360, 1_020, .standard),
             ("maya", "Maya", .won, 1_180, 1_150, ChallengeSetup(difficulty: .hard)),
             ("maya", "Maya", .lost, 940, 1_210, ChallengeSetup(mode: .speed)),
-            ("sam", "Sam", .lost, 870, 1_190, ChallengeSetup(category: "Science", length: 15)),
+            ("sam", "Sam", .lost, 870, 1_190, ChallengeSetup(categories: ["Science"], length: 15)),
             ("jordan", "Jordan", .tied, 1_000, 1_000, ChallengeSetup(isTimed: false)),
         ]
         for (i, g) in demoGames.enumerated() {

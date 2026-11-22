@@ -205,13 +205,24 @@ struct QuestionBreakdownCard: View {
                     .foregroundStyle(isRight ? Theme.correct : pickers.isEmpty ? Theme.line : Theme.wrong)
                     .accessibilityHidden(true)
             }
-            Text(q.choices[i])
-                .font(.subheadline.weight(revealed && isRight ? .bold : .semibold))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            pickerFaces(pickers)
+            // Picks sit beside the answer when they fit on one line,
+            // and drop under it when they don't, so they never spill out of the row.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Space.s) {
+                    choiceText(i, bold: revealed && isRight).lineLimit(1)
+                    Spacer(minLength: 0)
+                    pickerFaces(pickers)
+                }
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    choiceText(i, bold: revealed && isRight)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !pickers.isEmpty { pickerFaces(pickers) }
+                }
+            }
         }
         .padding(.horizontal, Space.m)
+        .padding(.vertical, Space.xs)
         .frame(minHeight: 44)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(fill))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(stroke, lineWidth: 1.5))
@@ -235,22 +246,36 @@ struct QuestionBreakdownCard: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func choiceText(_ i: Int, bold: Bool) -> some View {
+        Text(question.question.choices[i])
+            .font(.subheadline.weight(bold ? .bold : .semibold))
+    }
+
+    /// Each pick as a small chip: the player's face with their time or points
+    /// beside it once revealed. Sized to sit inside a 44pt row.
     private func pickerFaces(_ answers: [ReplayQuestion.Answer]) -> some View {
-        HStack(spacing: -6) {
+        HStack(spacing: 4) {
             ForEach(answers, id: \.playerID) { a in
-                VStack(spacing: 1) {
-                    PlayerAvatar(name: name(a.playerID), card: match.data.player(a.playerID)?.card, size: 28,
+                HStack(spacing: 4) {
+                    PlayerAvatar(name: name(a.playerID), card: match.data.player(a.playerID)?.card, size: 22,
                                  expands: false)
+                        .padding(3) // room for a card border ring
                     if revealed {
                         Text(a.pick.points > 0 ? "+\(a.pick.points)" : "\(a.pick.seconds.formatted(.number.precision(.fractionLength(1))))s")
-                            .font(.system(size: 9, weight: .heavy, design: .rounded))
+                            .font(.caption2.weight(.heavy))
                             .foregroundStyle(a.pick.points > 0 ? Theme.correct : Theme.muted)
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.trailing, 6)
                     }
                 }
+                .background(Capsule().fill(Theme.card.opacity(revealed ? 1 : 0)))
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 .transition(.scale(scale: 0.2).combined(with: .opacity))
             }
         }
+        .fixedSize()
     }
 
     private func note(_ icon: String, _ text: String) -> some View {

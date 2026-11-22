@@ -269,13 +269,64 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         }
         let picked = QuestionBank.balanced(pool, take: 10, maxPerCategory: nil)
         #expect(picked.count == 10)
-        // 3 hard allowed + 5 easy available = 8, then hard ones fill the gap.
-        #expect(picked.prefix(8).filter { $0.difficulty == "hard" }.count == 3)
+        // 2 hard allowed + 5 easy available = 7, then hard ones fill the gap.
+        #expect(picked.prefix(7).filter { $0.difficulty == "hard" }.count == QuestionBank.maxHardPerRound)
+    }
+
+    @Test func mixedLevelRoundsLeanEasy() {
+        var rng = SplitMix64(seed: 5)
+        // Plenty of each level, spread over many categories.
+        let levels = ["easy", "medium", "hard"]
+        let pool = (0..<300).map {
+            Question(category: "C\($0 % 30)", prompt: "p\($0)", choices: ["a", "b"], correctIndex: 0,
+                     difficulty: levels[$0 % 3])
+        }
+        let round = QuestionBank(questions: pool).dealRound(count: 10, reserve: 3, using: &rng)
+        let all = round.questions + round.reserve
+        let count = { (level: String) in all.filter { $0.difficulty == level }.count }
+        #expect(all.count == 13)
+        #expect(count("hard") == QuestionBank.maxHardPerRound)
+        #expect(count("medium") == QuestionBank.maxMediumPerRound)
+        #expect(count("easy") == 13 - QuestionBank.maxHardPerRound - QuestionBank.maxMediumPerRound)
+    }
+
+    @Test func shortOnEasyFillsWithMediumBeforeHard() {
+        // 2 easy, lots of medium and hard: medium fills before extra hard.
+        let pool = (0..<2).map { Question(category: "C\($0)", prompt: "e\($0)", choices: ["a", "b"], correctIndex: 0, difficulty: "easy") }
+            + (0..<20).map { Question(category: "C\($0)", prompt: "h\($0)", choices: ["a", "b"], correctIndex: 0, difficulty: "hard") }
+            + (0..<20).map { Question(category: "C\($0)", prompt: "m\($0)", choices: ["a", "b"], correctIndex: 0, difficulty: "medium") }
+        let picked = QuestionBank.balanced(pool, take: 13, maxPerCategory: nil, maxHard: 2, maxMedium: 5)
+        #expect(picked.count == 13)
+        #expect(picked.filter { $0.difficulty == "hard" }.count == 2)
+    }
+
+    @Test func dealsFromSeveralPickedCategories() {
+        var rng = SplitMix64(seed: 9)
+        var pool: [Question] = []
+        for c in ["A", "B", "C", "D"] {
+            pool += (0..<20).map { Question(category: c, prompt: "\(c)\($0)", choices: ["a", "b"], correctIndex: 0) }
+        }
+        let round = QuestionBank(questions: pool).dealRound(count: 10, reserve: 3, categories: ["A", "C"], using: &rng)
+        let all = round.questions + round.reserve
+        #expect(all.count == 13)
+        #expect(all.allSatisfy { ["A", "C"].contains($0.category) })
+        // Spread across both, not all from one.
+        #expect(all.filter { $0.category == "A" }.count >= 6)
+        #expect(all.filter { $0.category == "C" }.count >= 6)
+    }
+
+    @Test func playableCategoriesNeedEnoughQuestions() {
+        let pool = (0..<QuestionBank.minimumCategorySize).map {
+            Question(category: "Deep", prompt: "d\($0)", choices: ["a", "b"], correctIndex: 0)
+        } + [Question(category: "Thin", prompt: "t", choices: ["a", "b"], correctIndex: 0)]
+        let bank = QuestionBank(questions: pool)
+        #expect(bank.categories.contains("Thin"))
+        #expect(bank.playableCategories == ["Deep"])
     }
 
     @Test func categoryRoundsIgnoreTheCategoryCap() {
         let pool = (0..<12).map { Question(category: "Games", prompt: "g\($0)", choices: ["a", "b"], correctIndex: 0) }
-        #expect(QuestionBank(questions: pool).dealRound(count: 10, reserve: 0, category: "Games").questions.count == 10)
+        #expect(QuestionBank(questions: pool).dealRound(count: 10, reserve: 0, categories: ["Games"]).questions.count == 10)
     }
 
     @Test func mergingDropsDuplicatePrompts() {
@@ -296,7 +347,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
             Question(category: "A", prompt: "1", choices: ["a", "b"], correctIndex: 0),
             Question(category: "B", prompt: "2", choices: ["a", "b"], correctIndex: 0),
         ])
-        #expect(bank.dealRound(category: "B").questions.map(\.prompt) == ["2"])
+        #expect(bank.dealRound(categories: ["B"]).questions.map(\.prompt) == ["2"])
     }
 
     @Test func decodesJSONWithoutIDs() throws {
@@ -322,7 +373,7 @@ private func makeQuestions(_ count: Int) -> [Question] { (0..<count).map { q($0)
         var rng = SplitMix64(seed: 7)
         var dealt: [String] = []
         for _ in 0..<4 {
-            let round = bank.dealRound(count: 10, reserve: 0, category: "Science", seen: seen, using: &rng)
+            let round = bank.dealRound(count: 10, reserve: 0, categories: ["Science"], seen: seen, using: &rng)
             dealt += round.questions.map(\.prompt)
             seen.markSeen(round.questions)
         }
