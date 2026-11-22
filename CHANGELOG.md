@@ -3,20 +3,31 @@
 Player-facing notes for each TestFlight build. The current build's notes are
 also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
-## Next build
+## 0.2.0 (9)
 
-STYLE SHOP
-- Lots more ways to show off your style, all bought with Sparks you earn by playing.
-- 11 new app themes, including Autumn Leaves and Matcha with falling leaves, Sweetheart and Bubblegum Pop with floating hearts, plus Deep Sea, Thunderstorm, Lantern Night and Galaxy.
-- 6 new sound packs: Kalimba, Toy Piano, Steel Drum, Bubble Pop, Crystal and Synthwave.
-- Player Card: 23 new avatars, 12 avatar colors, 12 borders, 17 backgrounds (new hearts, stars, plaid, argyle, ripples and sprinkles patterns), 15 emblems, 18 stickers, 4 letterings, 3 card shapes (postage stamp, speed slant, scooped) and 6 finishes (frost, prism, aurora glow, rose and ice shine, gold glitter).
-- The shop now lists free items first, then cheapest to priciest, then ones you earn by playing.
+QUESTIONS
+- Easier mixed rounds: each 13-question round now has at most 2 hard and 5 medium questions, and difficulty tags were redone so "easy" really means easy.
+- New categories: Mythology, Cartoons, Comics and Vehicles. More (Food, Space, Human Body, Words, Holidays, Brands) unlock as they fill up.
+- Pick several categories at once on Home and in challenge rules.
+- 400 new Quizio original questions.
 
 DAILY AND WEEKLY TABS
 - Daily has its own tab: play today's Daily, see tomorrow's category mix and a countdown, a five-week streak calendar, your Daily stats, and every past Daily with its grid (tap one to share it again).
 - Weekly has its own tab: this week's event and track, next week's theme and reward, the weeks after that, and your past events with points, best round and rewards.
 - Friends leaderboards on both tabs: today and yesterday for the Daily, this week and last week for the event (your best timed round counts).
 - Settings moved to the gear on Profile so all five tabs fit.
+
+STYLE SHOP
+- 11 new app themes, including Autumn Leaves and Matcha with falling leaves, Sweetheart and Bubblegum Pop with floating hearts, plus Deep Sea, Thunderstorm, Lantern Night and Galaxy.
+- 6 new sound packs: Kalimba, Toy Piano, Steel Drum, Bubble Pop, Crystal and Synthwave.
+- Player Card: 23 new avatars, 12 avatar colors, 12 borders, 17 backgrounds, 15 emblems, 18 stickers, 4 letterings, 3 card shapes and 6 finishes.
+- The shop now lists free items first, then cheapest to priciest, then ones you earn by playing.
+
+FIXES
+- Replay picks fit inside the answer rows instead of spilling out.
+- The Group match button is readable in dark themes.
+
+Please test: multi-category picks, the new Daily and Weekly tabs, the Style shop, and whether mixed rounds feel easier.
 
 ## 0.2.0 (8)
 
