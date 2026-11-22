@@ -42,20 +42,48 @@ import Testing
         }
     }
 
-    /// Thin categories repeat fast; keep every category deep enough for
-    /// several rounds per difficulty.
-    @Test func everyCategoryHasADeepPool() throws {
+    /// The categories the app launched with. Thin categories repeat fast,
+    /// so these stay deep enough for several rounds per difficulty.
+    static let establishedCategories = [
+        "General", "Science", "History", "Geography", "Movies", "TV", "Music",
+        "Sports", "Games", "Books", "Art", "Nature", "Tech", "Pop Culture", "Anime",
+    ]
+
+    @Test func establishedCategoriesHaveADeepPool() throws {
         let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
-        for category in bank.categories {
+        for category in Self.establishedCategories {
             #expect(bank.count(in: category) >= 150, "\(category) has \(bank.count(in: category))")
         }
+    }
+
+    /// Newer categories (Food, Space, Mythology...) only show up as picks
+    /// once they're deep enough; until then their questions play in mixes.
+    @Test func onlyDeepCategoriesArePickable() throws {
+        let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
+        for category in bank.categories {
+            let deep = bank.count(in: category) >= QuestionBank.minimumCategorySize
+            #expect(bank.playableCategories.contains(category) == deep, "\(category)")
+        }
+        for category in ["Mythology", "Cartoons", "Comics", "Vehicles"] {
+            #expect(bank.playableCategories.contains(category), "\(category)")
+        }
+    }
+
+    /// Mixed rounds lean easy, so the bank needs plenty of easy and medium
+    /// questions, not just hard ones.
+    @Test func mixedRoundsHaveEnoughEasierQuestions() throws {
+        let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
+        let easy = bank.questions.filter { $0.difficulty == "easy" }.count
+        let medium = bank.questions.filter { $0.difficulty == "medium" }.count
+        #expect(easy >= 600, "\(easy) easy")
+        #expect(medium >= 1_000, "\(medium) medium")
     }
 
     @Test func mergedBankDealsFullRoundsInEveryCategory() throws {
         let bank = QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"), try Self.load("opentdb")])
         #expect(bank.dealRound().questions.count == GameRules.questionsPerRound)
-        for category in bank.categories {
-            let round = bank.dealRound(category: category)
+        for category in bank.playableCategories {
+            let round = bank.dealRound(categories: [category])
             #expect(round.questions.count == GameRules.questionsPerRound, "\(category)")
             #expect(round.reserve.count == GameRules.soloPowerUpsPerRound, "\(category)")
         }

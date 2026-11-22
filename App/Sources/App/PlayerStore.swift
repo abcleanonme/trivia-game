@@ -5,7 +5,8 @@ import TriviaKit
 /// What the player asked to play. Identifiable so it can drive a cover.
 struct RoundRequest: Identifiable {
     enum Kind {
-        case solo(mode: GameMode, category: String?, difficulty: Difficulty)
+        /// `categories` empty means a mixed round.
+        case solo(mode: GameMode, categories: [String], difficulty: Difficulty)
         /// The Daily for this date (fixed when the round starts, so a round
         /// that runs past midnight still counts for the day it began).
         case daily(Day)
@@ -15,8 +16,8 @@ struct RoundRequest: Identifiable {
     let id = UUID()
     let kind: Kind
 
-    static func classic(category: String?) -> RoundRequest {
-        RoundRequest(kind: .solo(mode: .classic, category: category, difficulty: .mixed))
+    static func classic(categories: [String] = []) -> RoundRequest {
+        RoundRequest(kind: .solo(mode: .classic, categories: categories, difficulty: .mixed))
     }
 
     var isDaily: Bool { if case .daily = kind { true } else { false } }
@@ -84,8 +85,8 @@ final class PlayerStore {
     /// already played (one attempt per day).
     func newSession(for request: RoundRequest, relaxed: Bool) -> GameSession? {
         switch request.kind {
-        case .solo(let mode, let category, let difficulty):
-            let round = bank.dealRound(count: mode.questionCount, category: category,
+        case .solo(let mode, let categories, let difficulty):
+            let round = bank.dealRound(count: mode.questionCount, categories: Set(categories),
                                        difficulty: difficulty.tag, seen: seen)
             // The first few are seen even if the app closes mid-round; the
             // rest are recorded as they're shown (see `finish`).
@@ -135,7 +136,7 @@ final class PlayerStore {
     func newChallenge(_ setup: ChallengeSetup = .standard) -> ChallengeData {
         let setup = setup.sanitized()
         let round = bank.dealRound(count: setup.questionCount, reserve: setup.reserveCount,
-                                   category: setup.category, difficulty: setup.difficulty.tag, seen: seen)
+                                   categories: Set(setup.categories), difficulty: setup.difficulty.tag, seen: seen)
         remember(round.questions.prefix(GameRules.questionsPerRound))
         return ChallengeData(setup: setup, questions: round.questions, reserve: round.reserve)
     }

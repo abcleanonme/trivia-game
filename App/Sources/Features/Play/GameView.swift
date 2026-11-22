@@ -127,6 +127,6 @@ struct GameView: View {
 }
 
 #Preview {
-    GameView(request: .classic(category: nil), relaxed: false)
+    GameView(request: .classic(), relaxed: false)
         .environment(PlayerStore.preview)
 }

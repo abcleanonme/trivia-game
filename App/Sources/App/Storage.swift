@@ -26,6 +26,8 @@ enum SettingKey {
     static let animatedBackgrounds = "animatedBackgrounds"
     static let gameMode = "gameMode"
     static let difficulty = "difficulty"
+    /// Home's picked categories, joined with "|" (empty for mixed).
+    static let categoryPicks = "categoryPicks"
     /// Match breakdowns play answers back as they happened.
     static let liveReplay = "liveReplay"
 }

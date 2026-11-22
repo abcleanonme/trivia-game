@@ -71,8 +71,12 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     public let reserve: [Question]
     public let isTimed: Bool
     public let powerUpLimit: Int
-    /// nil for a mixed round.
+    /// The one category of a single-category round; nil for mixed or
+    /// several. Kept so older builds still show it.
     public let category: String?
+    /// Every category the challenger picked; nil in matches from before
+    /// multi-category picks (read `category` then).
+    private let categoryList: [String]?
     /// nil in matches from before version 2, which were all Classic.
     private let mode: GameMode?
     /// The level the challenger picked; nil (older matches) means Mixed.
@@ -91,7 +95,7 @@ public struct ChallengeData: Codable, Equatable, Sendable {
 
     public init(questions: [Question], reserve: [Question], isTimed: Bool = true,
                 powerUpLimit: Int = GameRules.challengePowerUpsPerRound,
-                category: String? = nil, mode: GameMode = .classic,
+                categories: [String] = [], mode: GameMode = .classic,
                 difficulty: Difficulty = .mixed, allowsInvites: Bool = true,
                 turns: [ChallengeTurn] = []) {
         self.version = Self.currentVersion
@@ -100,7 +104,8 @@ public struct ChallengeData: Codable, Equatable, Sendable {
         // A Speed round is its clock.
         self.isTimed = isTimed || mode == .speed
         self.powerUpLimit = powerUpLimit
-        self.category = category
+        self.category = categories.count == 1 ? categories[0] : nil
+        self.categoryList = categories.isEmpty ? nil : categories
         self.mode = mode
         self.difficulty = difficulty
         self.invites = allowsInvites
@@ -109,11 +114,13 @@ public struct ChallengeData: Codable, Equatable, Sendable {
 
     public init(setup: ChallengeSetup, questions: [Question], reserve: [Question]) {
         self.init(questions: questions, reserve: reserve, isTimed: setup.hasClock,
-                  powerUpLimit: setup.powerUpLimit, category: setup.category,
+                  powerUpLimit: setup.powerUpLimit, categories: setup.categories,
                   mode: setup.mode, difficulty: setup.difficulty, allowsInvites: setup.allowsInvites)
     }
 
     public var gameMode: GameMode { mode ?? .classic }
+    /// The categories this match draws from; empty for mixed.
+    public var categories: [String] { categoryList ?? category.map { [$0] } ?? [] }
     public var level: Difficulty { difficulty ?? .mixed }
     public var allowsInvites: Bool { invites ?? true }
 
@@ -121,7 +128,7 @@ public struct ChallengeData: Codable, Equatable, Sendable {
     /// match. Written in the current format.
     public func groupCopy(from matchID: String) -> ChallengeData {
         var copy = ChallengeData(questions: questions, reserve: reserve, isTimed: isTimed,
-                                 powerUpLimit: powerUpLimit, category: category, mode: gameMode,
+                                 powerUpLimit: powerUpLimit, categories: categories, mode: gameMode,
                                  difficulty: level, allowsInvites: allowsInvites, turns: turns)
         copy.players = players
         copy.groupFrom = matchID
@@ -151,7 +158,7 @@ public struct ChallengeData: Codable, Equatable, Sendable {
 
     /// The rules this match was made with, for a rematch on the same terms.
     public var setup: ChallengeSetup {
-        ChallengeSetup(mode: gameMode, difficulty: level, category: category,
+        ChallengeSetup(mode: gameMode, difficulty: level, categories: categories,
                        length: gameMode == .classic ? questions.count : GameRules.questionsPerRound,
                        isTimed: isTimed, powerUpLimit: powerUpLimit, allowsInvites: allowsInvites)
     }
