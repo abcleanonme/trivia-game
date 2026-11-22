@@ -103,41 +103,71 @@ extension GameCenter {
 
     // MARK: Leaderboards
 
-    /// Loads friends' scores on one board, you included.
-    func loadBoard(_ board: FriendBoard) async {
+    /// A board's scores as last loaded. `previous` is yesterday's Daily
+    /// or last week's event.
+    func boardState(_ board: FriendBoard, previous: Bool = false) -> BoardState? {
+        previous ? previousBoards[board] : boards[board]
+    }
+
+    private func setBoard(_ board: FriendBoard, previous: Bool, _ state: BoardState) {
+        if previous { previousBoards[board] = state } else { boards[board] = state }
+    }
+
+    /// Loads friends' scores on one board, you included. For the Daily and
+    /// Weekly boards, `previous` loads yesterday's or last week's instead.
+    func loadBoard(_ board: FriendBoard, previous: Bool = false) async {
         if isDemo { return }
         guard auth == .signedIn else { return }
-        if case .loaded? = boards[board] {} else { boards[board] = .loading }
+        if case .loaded? = boardState(board, previous: previous) {} else { setBoard(board, previous: previous, .loading) }
         do {
             guard let leaderboard = try await GKLeaderboard.loadLeaderboards(IDs: [board.leaderboardID]).first else {
-                boards[board] = .failed("This leaderboard isn't live yet. Check back after the next update.")
+                setBoard(board, previous: previous,
+                         .failed("This leaderboard isn't live yet. Check back after the next update."))
                 return
             }
-            let (local, entries, _) = try await leaderboard.loadEntries(
-                for: .friendsOnly, timeScope: .allTime, range: NSRange(location: 1, length: 50))
-            var all = entries
-            if let local, !all.contains(where: { $0.player.gamePlayerID == local.player.gamePlayerID }) {
-                all.append(local)
+            var all: [GKLeaderboard.Entry] = []
+            if let context = board.context(today: store.today, previous: previous) {
+                // Game Center's periods start at a fixed UTC time, not local
+                // midnight, so a day's (or week's) scores can sit in this
+                // occurrence or the one before. Read both and keep only
+                // scores tagged with the period we want.
+                var occurrences = [leaderboard]
+                if let prior = try? await leaderboard.loadPreviousOccurrence() { occurrences.append(prior) }
+                var best: [String: GKLeaderboard.Entry] = [:]
+                for occurrence in occurrences {
+                    let (local, entries, _) = try await occurrence.loadEntries(
+                        for: .friendsOnly, timeScope: .allTime, range: NSRange(location: 1, length: 50))
+                    for e in entries + [local].compactMap({ $0 }) where e.context == context {
+                        let id = e.player.gamePlayerID
+                        if let kept = best[id], kept.score >= e.score { continue }
+                        best[id] = e
+                    }
+                }
+                all = Array(best.values)
+            } else {
+                let (local, entries, _) = try await leaderboard.loadEntries(
+                    for: .friendsOnly, timeScope: .allTime, range: NSRange(location: 1, length: 50))
+                all = entries
+                if let local, !all.contains(where: { $0.player.gamePlayerID == local.player.gamePlayerID }) {
+                    all.append(local)
+                }
             }
-            // The Daily resets on Game Center's clock, which isn't local
-            // midnight everywhere, so keep only scores tagged with today.
-            let today = store.today.ordinal
-            if board.isDaily { all = all.filter { $0.context == today } }
             all.sort { $0.score != $1.score ? $0.score > $1.score : $0.rank < $1.rank }
             let me = localPlayerID
-            boards[board] = .loaded(all.enumerated().map { i, e in
+            setBoard(board, previous: previous, .loaded(all.enumerated().map { i, e in
                 BoardEntry(id: e.player.gamePlayerID, rank: i + 1, name: e.player.displayName,
                            value: e.score, isMe: e.player.gamePlayerID == me)
-            })
+            }))
         } catch {
-            boards[board] = .failed(Self.friendly(error, doing: "load this leaderboard"))
+            setBoard(board, previous: previous, .failed(Self.friendly(error, doing: "load this leaderboard")))
         }
     }
 
     // MARK: Posting scores
 
     /// Posts anything that changed since last time: the Daily right after
-    /// it's played (timed only), and the lifetime boards. Cheap to call often.
+    /// it's played (timed only), this week's best event round after an
+    /// event round, and the lifetime boards. Cheap to call often.
     func postScores(after kind: RoundKind?) {
         guard !isDemo, auth == .signedIn else { return }
         let progress = store.progress
@@ -146,6 +176,10 @@ extension GameCenter {
         if case .daily(let day)? = kind, day == today,
            let points = FriendBoard.dailyScore(progress.dailies[day]) {
             posts.append((.daily, points, day.ordinal))
+        }
+        if case .event(let event, let week)? = kind, week == today.weekIndex,
+           let best = FriendBoard.weeklyScore(progress.eventProgress(event, week: week)) {
+            posts.append((.weekly, best, week))
         }
         for board in FriendBoard.allCases {
             guard let value = board.value(progress: progress, today: today),
@@ -158,7 +192,7 @@ extension GameCenter {
                 do {
                     try await GKLeaderboard.submitScore(value, context: context, player: GKLocalPlayer.local,
                                                         leaderboardIDs: [board.leaderboardID])
-                    if !board.isDaily { setLastPosted(value, for: board) }
+                    if !board.isRecurring { setLastPosted(value, for: board) }
                     if case .loaded? = boards[board] { await loadBoard(board) }
                 } catch {
                     // Tried again on the next refresh.
@@ -186,6 +220,7 @@ extension GameCenter {
         for (i, board) in FriendBoard.allCases.enumerated() {
             let base: [Int] = switch board {
             case .daily: [1_480, 1_310, 1_120, 990, 760]
+            case .weekly: [1_620, 1_450, 1_200, 1_040, 880]
             case .streak: [21, 12, 9, 4, 1]
             case .challengeWins: [14, 11, 6, 3, 2]
             case .correct: [2_410, 1_980, 1_502, 880, 412]
@@ -197,6 +232,12 @@ extension GameCenter {
             boards[board] = .loaded(zip(order, base).enumerated().map { rank, pair in
                 BoardEntry(id: pair.0.0, rank: rank + 1, name: pair.0.1, value: pair.1, isMe: pair.0.0 == me)
             })
+            if board.isRecurring {
+                let earlier = people.indices.map { people[($0 + i + 2) % people.count] }
+                previousBoards[board] = .loaded(zip(earlier, base).enumerated().map { rank, pair in
+                    BoardEntry(id: pair.0.0, rank: rank + 1, name: pair.0.1, value: pair.1 - 90, isMe: pair.0.0 == me)
+                })
+            }
         }
     }
 }

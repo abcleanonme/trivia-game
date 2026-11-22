@@ -112,6 +112,26 @@ public struct WeeklyEvent: Identifiable, Equatable, Sendable {
         return rotation[i]
     }
 
+    /// The event for a week number (`Day.weekIndex`).
+    public static func event(week: Int) -> WeeklyEvent { event(on: Day.firstDay(ofWeek: week)) }
+
+    /// The next `count` weeks after the one `day` is in, soonest first.
+    public static func upcoming(after day: Day, count: Int) -> [EventWeek] {
+        (1...max(count, 1)).map { offset in
+            let week = day.weekIndex + offset
+            return EventWeek(event: event(week: week), week: week)
+        }
+    }
+
+    /// Splits an `instanceID` back into the event and week. nil for ids of
+    /// events no longer in the app.
+    public static func parseInstanceID(_ id: String) -> (event: WeeklyEvent, week: Int)? {
+        let parts = id.split(separator: "@")
+        guard parts.count == 2, let week = Int(parts[1]),
+              let event = all.first(where: { $0.id == parts[0] }) else { return nil }
+        return (event, week)
+    }
+
     /// U.S. Thanksgiving: the fourth Thursday of November.
     public static func thanksgivingDay(year: Int) -> Day {
         let first = Day(year: year, month: 11, day: 1)
@@ -128,6 +148,10 @@ public struct EventProgress: Codable, Equatable, Sendable {
     /// Number of milestones already paid out.
     public var milestonesPaid = 0
     public var completed = false
+    /// Best single timed round this week. This is what the weekly friends
+    /// leaderboard ranks, so replaying more doesn't beat playing well, and
+    /// relaxed (no clock) rounds never rank against timed ones.
+    public var bestRound = 0
 
     public init() {}
 
@@ -135,9 +159,10 @@ public struct EventProgress: Codable, Equatable, Sendable {
 
     /// Adds a round's points. Returns Sparks for any milestones passed and
     /// whether the track was just completed.
-    public mutating func add(points earned: Int) -> (sparks: Int, justCompleted: Bool) {
+    public mutating func add(points earned: Int, timed: Bool = true) -> (sparks: Int, justCompleted: Bool) {
         points += max(earned, 0)
         rounds += 1
+        if timed { bestRound = max(bestRound, earned) }
         var sparks = 0
         while milestonesPaid < WeeklyEvent.milestones.count,
               fraction >= WeeklyEvent.milestones[milestonesPaid].fraction {
@@ -148,4 +173,38 @@ public struct EventProgress: Codable, Equatable, Sendable {
         if finishedNow { completed = true }
         return (sparks, finishedNow)
     }
+
+    // Tolerant decoding: saves from before `bestRound` existed still load.
+    private enum CodingKeys: String, CodingKey {
+        case points, rounds, milestonesPaid, completed, bestRound
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 0
+        rounds = try c.decodeIfPresent(Int.self, forKey: .rounds) ?? 0
+        milestonesPaid = try c.decodeIfPresent(Int.self, forKey: .milestonesPaid) ?? 0
+        completed = try c.decodeIfPresent(Bool.self, forKey: .completed) ?? false
+        bestRound = try c.decodeIfPresent(Int.self, forKey: .bestRound) ?? 0
+    }
+}
+
+/// One week of the event calendar: which event ran (or will run), and what
+/// the player did in it.
+public struct EventWeek: Identifiable, Equatable, Sendable {
+    public let event: WeeklyEvent
+    public let week: Int
+    public let progress: EventProgress
+
+    public init(event: WeeklyEvent, week: Int, progress: EventProgress = EventProgress()) {
+        self.event = event
+        self.week = week
+        self.progress = progress
+    }
+
+    public var id: String { WeeklyEvent.instanceID(event, week: week) }
+    /// Monday.
+    public var start: Day { Day.firstDay(ofWeek: week) }
+    /// Sunday.
+    public var end: Day { start + 6 }
 }

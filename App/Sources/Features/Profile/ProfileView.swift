@@ -11,11 +11,21 @@ struct ProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 // Same compact header as Home and Friends.
-                Text("Profile")
-                    .font(Theme.display(.title))
-                    .foregroundStyle(Theme.ink)
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.bottom, -Space.s)
+                HStack(alignment: .center) {
+                    Text("Profile")
+                        .font(Theme.display(.title))
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    NavigationLink { SettingsView() } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title3.weight(.bold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.chunky(fill: Theme.card, capsule: true))
+                    .accessibilityLabel("Settings")
+                }
+                .padding(.bottom, -Space.s)
                 VStack(spacing: Space.m) {
                     // The card itself opens the Studio, so there's one obvious way in.
                     NavigationLink { CardStudioView() } label: {
