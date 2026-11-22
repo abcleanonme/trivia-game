@@ -14,7 +14,7 @@ The writer and reviewer tasks each append a row per run. Rules live in writer-ru
 | Run date | PRs reviewed | Backlog reviewed | Outcome |
 |---|---|---|---|
 | 2026-11-18 | #13 | Part of the PR #7 backlog | Removed 28 duplicates from #13. About 608 backlog questions still unreviewed on 2026-11-22. |
-| 2026-11-22 | #24 | 150 (Books and Nature, oldest first) | #24: 379 kept (8 fixed, 92 relabeled easier), 21 duplicates removed. Backlog: 128 kept (7 fixed, 19 relabeled), 22 removed (19 duplicates, 3 minutiae or giveaways). 458 backlog questions still unreviewed. |
+| 2026-11-22 | #24 | 150 (Books and Nature, oldest first) | #24: 379 kept (8 fixed, 92 relabeled easier), 21 duplicates removed. Backlog: 128 kept (7 fixed, 19 relabeled), 22 removed (18 duplicates, 4 minutiae or giveaways). 458 backlog questions still unreviewed. |
 
 ## Notes for future runs
 
