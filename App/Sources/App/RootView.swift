@@ -16,15 +16,20 @@ struct RootView: View {
             Tab("Play", systemImage: "questionmark.circle") {
                 NavigationStack { HomeView() }
             }
-            Tab("Profile", systemImage: "person.crop.circle") {
-                NavigationStack { ProfileView() }
+            Tab("Daily", systemImage: "calendar") {
+                NavigationStack { DailyTabView() }
+            }
+            Tab("Weekly", systemImage: "star.circle") {
+                NavigationStack { WeeklyTabView() }
             }
             Tab("Friends", systemImage: "person.2") {
                 NavigationStack { FriendsView() }
             }
             .badge(gameCenter.yourTurnCount)
-            Tab("Settings", systemImage: "gear") {
-                NavigationStack { SettingsView() }
+            // Five tabs fit the iPhone tab bar without a "More" tab, so
+            // Settings opens from the gear on Profile.
+            Tab("Profile", systemImage: "person.crop.circle") {
+                NavigationStack { ProfileView() }
             }
         }
         .tabViewStyle(.sidebarAdaptable)

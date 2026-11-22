@@ -120,6 +120,8 @@ final class GameCenter: NSObject {
     var friends: [Friend] = []
     var friendsAccess: FriendsAccess = .unknown
     var boards: [FriendBoard: BoardState] = [:]
+    /// Yesterday's Daily and last week's event (recurring boards only).
+    var previousBoards: [FriendBoard: BoardState] = [:]
     private(set) var isLoading = false
     /// Drives the full-screen challenge cover.
     var activeRound: ChallengeRound?

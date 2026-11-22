@@ -32,11 +32,16 @@ public struct Day: Hashable, Comparable, Codable, Sendable, CustomStringConverti
 
     /// Weeks run Monday to Sunday. 1970-01-01 was a Thursday.
     public var weekIndex: Int { Self.floorDiv(ordinal + 3, 7) }
-    public var weekStart: Day { Day(ordinal: weekIndex * 7 - 3) }
+    public var weekStart: Day { Self.firstDay(ofWeek: weekIndex) }
+    /// Monday of a week number.
+    public static func firstDay(ofWeek week: Int) -> Day { Day(ordinal: week * 7 - 3) }
+
+    /// Midnight UTC on this date. Format it in UTC to show the right date.
+    public var utcDate: Date { Date(timeIntervalSince1970: Double(ordinal) * 86_400) }
 
     public var components: DateComponents {
         Self.utcCalendar.dateComponents([.year, .month, .day],
-                                        from: Date(timeIntervalSince1970: Double(ordinal) * 86_400))
+                                        from: utcDate)
     }
 
     public static func + (lhs: Day, rhs: Int) -> Day { Day(ordinal: lhs.ordinal + rhs) }

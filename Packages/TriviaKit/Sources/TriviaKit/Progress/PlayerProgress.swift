@@ -98,6 +98,40 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
         }
     }
 
+    // MARK: History
+
+    /// Every Daily before `day` that was started, newest first.
+    public func dailyHistory(before day: Day) -> [DailyRecord] {
+        dailies.values.filter { $0.day < day }.sorted { $0.day > $1.day }
+    }
+
+    /// How a day looks on the Daily calendar.
+    public func dailyStatus(on day: Day, today: Day) -> DailyDayStatus {
+        if day > today { return .upcoming }
+        if day < Day.launch { return .beforeLaunch }
+        guard let record = dailies[day] else { return day == today ? .open : .missed }
+        if !record.finished { return .leftEarly }
+        return record.marks.count > 0 && record.correct == record.marks.count ? .perfect : .played
+    }
+
+    /// Lifetime Daily numbers for the Daily tab.
+    public var dailySummary: DailySummary {
+        let played = dailies.values.filter { $0.finished && !$0.marks.isEmpty }
+        let perfect = played.filter { $0.correct == $0.marks.count }.count
+        let average = played.isEmpty ? nil : Double(played.map(\.correct).reduce(0, +)) / Double(played.count)
+        let best = played.filter { !$0.relaxed }.map(\.points).max()
+        return DailySummary(played: played.count, perfect: perfect, averageCorrect: average, bestPoints: best)
+    }
+
+    /// Weekly events the player took part in before `week`, newest first.
+    public func eventHistory(before week: Int) -> [EventWeek] {
+        events.compactMap { id, progress -> EventWeek? in
+            guard progress.rounds > 0, let run = WeeklyEvent.parseInstanceID(id), run.week < week else { return nil }
+            return EventWeek(event: run.event, week: run.week, progress: progress)
+        }
+        .sorted { $0.week > $1.week }
+    }
+
     // MARK: Daily attempts
 
     /// Starts today's one attempt. Returns false if it's already used.
@@ -178,7 +212,7 @@ public struct PlayerProgress: Codable, Equatable, Sendable {
             guard finished else { break }
             let id = WeeklyEvent.instanceID(event, week: week)
             var progress = events[id] ?? EventProgress()
-            let (sparks, completed) = progress.add(points: session.totalPoints)
+            let (sparks, completed) = progress.add(points: session.totalPoints, timed: session.isTimed)
             events[id] = progress
             rewards.eventSparks = sparks
             if completed {
