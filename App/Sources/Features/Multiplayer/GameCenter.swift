@@ -116,6 +116,11 @@ final class GameCenter: NSObject {
         didSet { defaults.setEncoded(nextSetup, forKey: Self.setupKey) }
     }
 
+    /// Friends removed from Quizio's lists and archived challenges.
+    var tidy: LobbyTidy {
+        didSet { defaults.setEncoded(tidy, forKey: Self.tidyKey) }
+    }
+
     // Friends hub (see GameCenter+Friends.swift).
     var friends: [Friend] = []
     var friendsAccess: FriendsAccess = .unknown
@@ -152,6 +157,7 @@ final class GameCenter: NSObject {
     private var demoRivals: RivalryBook?
     private static let historyKey = "challenge.history.v1"
     private static let setupKey = "challenge.setup.v1"
+    private static let tidyKey = "lobby.tidy.v1"
     /// Older builds kept a second copy of head-to-head records here. Read
     /// once at launch for its list of counted matches, then removed.
     private static let legacyRivalriesKey = "rivalries.v1"
@@ -167,6 +173,7 @@ final class GameCenter: NSObject {
         history = defaults.decoded(ChallengeHistory.self, forKey: Self.historyKey) ?? ChallengeHistory()
         archive = MatchArchiveFile.load()
         nextSetup = defaults.decoded(ChallengeSetup.self, forKey: Self.setupKey)?.sanitized() ?? .standard
+        tidy = defaults.decoded(LobbyTidy.self, forKey: Self.tidyKey) ?? LobbyTidy()
         pending = defaults.decoded([String: ChallengeTurn].self, forKey: Self.pendingKey, using: .challenge) ?? [:]
         if let legacy = defaults.decoded(LegacyRivalries.self, forKey: Self.legacyRivalriesKey) {
             store.markMatchesCounted(legacy.countedMatchIDs)
@@ -610,6 +617,40 @@ final class GameCenter: NSObject {
         // Our lobby lists matches; the picker only starts new ones.
         picker.showExistingMatches = false
         present(picker)
+    }
+
+    /// Shows Game Center's own "Add Friends" sheet (send a request by
+    /// name, phone number, email or link). New friends show up in the list
+    /// once they accept.
+    func addFriend() {
+        if isDemo { return }
+        guard auth == .signedIn, let top = topViewController else {
+            errorMessage = "Sign in to Game Center to add friends."
+            return
+        }
+        do {
+            try GKLocalPlayer.local.presentFriendRequestCreator(from: top)
+        } catch {
+            errorMessage = Self.friendly(error, doing: "open Add Friends")
+        }
+    }
+
+    /// Removes finished challenges for good: from Game Center and from the
+    /// lobby. Head-to-head records and history stay.
+    func clear(_ items: [ChallengeItem]) async {
+        let ids = items.filter { $0.isFinished || $0.status == .declined }.map(\.id)
+        guard !ids.isEmpty else { return }
+        if !isDemo {
+            for id in ids {
+                // Already gone on Game Center's side is fine.
+                if let match = try? await GKTurnBasedMatch.load(withID: id) { try? await match.remove() }
+                cache[id] = nil
+            }
+        }
+        let gone = Set(ids)
+        challenges.removeAll { gone.contains($0.id) }
+        tidy.forget(ids)
+        if !isDemo { await refresh() }
     }
 
     // MARK: Helpers
