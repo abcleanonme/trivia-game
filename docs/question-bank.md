@@ -7,6 +7,7 @@ We own our question bank. It ships inside the app as JSON files in
 |---|---|---|
 | `originals.json` | Our own written and reviewed questions | Ours |
 | `originals-ai.json` | Our own AI-drafted questions (`"reviewed": false` until a person checks them) | Ours |
+| `events.json` | Questions written for one weekly event, tagged `"event": "<id>"`. They play only in that event (see [content-updates.md](content-updates.md)) | Ours |
 | `opentdb.json` | Seed set from the [Open Trivia Database](https://opentdb.com) (multiple-choice only) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 
 ## Open Trivia DB terms

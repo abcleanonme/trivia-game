@@ -169,7 +169,8 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
 @Suite struct EventTests {
     @Test func everyWeekHasAnEventAndHalloweenIsSpooky() {
         #expect(WeeklyEvent.event(on: Day(year: 2026, month: 10, day: 29)).id == "spooky")
-        let ids = Set((0..<10).map { WeeklyEvent.event(on: Day(year: 2027, month: 1, day: 4) + 7 * $0).id })
+        // Weeks before the holiday calendar keep the original rotation.
+        let ids = Set((1...10).map { WeeklyEvent.rotationEvent(week: WeeklyEvent.rotationAnchorWeek - $0).id })
         #expect(ids.count == WeeklyEvent.rotation.count)
     }
 
@@ -477,7 +478,10 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
 }
 
 @Suite struct BundledEventTests {
-    static let bank = QuestionBank(merging: [try! BundledBankTests.load("originals"),
+    /// The same files the app loads, events first as in `PlayerStore.eventPool`.
+    static let bank = QuestionBank(merging: [try! BundledBankTests.load("events"),
+                                             try! BundledBankTests.load("originals"),
+                                             try! BundledBankTests.load("originals-ai"),
                                              try! BundledBankTests.load("opentdb")])
 
     @Test(arguments: WeeklyEvent.all.map(\.id))
