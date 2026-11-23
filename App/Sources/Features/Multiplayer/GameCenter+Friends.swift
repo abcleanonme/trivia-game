@@ -70,8 +70,25 @@ extension GameCenter {
     }
 
     /// Everyone to show in the Friends list: Game Center friends plus anyone
-    /// we've played, with whoever we've played most at the top.
+    /// we've played, with whoever we've played most at the top. Friends the
+    /// player removed are left out (see `removedFriends`).
     var friendRows: [Friend] {
+        allFriendRows.filter { !tidy.isHidden($0.id) }
+    }
+
+    /// Friends the player removed from Quizio's lists, to restore.
+    var removedFriends: [Friend] {
+        allFriendRows.filter { tidy.isHidden($0.id) }
+    }
+
+    /// Takes a friend off the Friends list and the friend pickers. Game
+    /// Center has no way for an app to unfriend someone, so this only
+    /// applies in Quizio; their record and history stay.
+    func removeFriend(_ friendID: String) { tidy.hide(friendID) }
+
+    func restoreFriend(_ friendID: String) { tidy.unhide(friendID) }
+
+    private var allFriendRows: [Friend] {
         var seen = Set<String>()
         var rows: [Friend] = []
         for opponent in history.opponents where seen.insert(opponent.id).inserted {

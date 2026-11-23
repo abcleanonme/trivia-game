@@ -102,10 +102,14 @@ struct ShopView: View {
                 .foregroundStyle(Theme.correct)
                 .frame(maxWidth: .infinity, minHeight: 52)
         } else if inv.owns(item.id) {
-            Button("Use \(item.name)") { store.equip(item); previewing = nil }
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+            Button { store.equip(item); previewing = nil } label: {
+                // The frame goes inside the label so the button itself fills the row like the Buy button.
+                Label("Use \(item.name)", systemImage: "checkmark")
+                    .font(.headline)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
         } else if let price = item.price {
             Button {
                 if store.buy(item) { previewing = nil }

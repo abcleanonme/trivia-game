@@ -3,6 +3,21 @@
 Player-facing notes for each TestFlight build. The current build's notes are
 also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
+## 0.2.0 (10)
+
+FRIENDS
+- New Add friend button on the Friends list opens Game Center's Add Friends sheet.
+- Remove a friend from their page (⋯ menu) or by long-pressing their row. Removed friends move to a "Removed friends" list at the bottom where you can restore them. Your record with them stays.
+
+CHALLENGES
+- Your turn, Waiting, Finished and Archived fold open and closed, and long lists show the first few with "Show all".
+- Archive finished challenges one at a time (long-press) or all at once from the ⋯ menu on Finished. Clear old or all finished ones there too.
+
+FIXES
+- The "Use" button in the Style shop is full size, like the buy button.
+
+Please test: adding and removing friends, folding and archiving challenges, and the Use button in the Style shop.
+
 ## 0.2.0 (9)
 
 QUESTIONS

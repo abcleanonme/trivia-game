@@ -218,9 +218,14 @@ struct FriendsView: View {
 
     @ViewBuilder private var lobby: some View {
         let items = gameCenter.challenges
-        let yourTurn = items.filter { $0.status == .yourTurn || $0.status == .invited }
-        let waiting = items.filter { [.theirTurn, .findingOpponent, .declined, .needsUpdate].contains($0.status) }
-        let finished = items.filter(\.isFinished)
+        let tidy = gameCenter.tidy
+        let shown = items.filter { !tidy.isArchived($0.id) }
+        let yourTurn = shown.filter { $0.status == .yourTurn || $0.status == .invited }
+        let waiting = shown.filter { [.theirTurn, .findingOpponent, .declined, .needsUpdate].contains($0.status) }
+        let finished = shown.filter(\.isFinished)
+        // Only finished or declined challenges can be archived, so a game
+        // that still needs you never hides away.
+        let archived = items.filter { tidy.isArchived($0.id) && ($0.isFinished || $0.status == .declined) }
 
         if items.isEmpty && gameCenter.isLoading {
             ProgressView("Loading challenges…")
@@ -231,29 +236,164 @@ struct FriendsView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.muted)
         }
-        ChallengeSection(title: "Your turn", items: yourTurn)
-        ChallengeSection(title: "Waiting on them", items: waiting)
-        ChallengeSection(title: "Finished", items: Array(finished.prefix(10)))
+        ChallengeSection(title: "Your turn", items: yourTurn, collapseKey: "yourTurn", preview: 5)
+        ChallengeSection(title: "Waiting on them", items: waiting, collapseKey: "waiting", preview: 3)
+        ChallengeSection(title: "Finished", items: finished, collapseKey: "finished", startsOpen: false,
+                         preview: 5, tidyMenu: .finished)
+        ChallengeSection(title: "Archived", items: archived, collapseKey: "archived", startsOpen: false,
+                         preview: 5, tidyMenu: .archived)
     }
 }
 
-/// A titled list of challenge rows.
+/// A titled list of challenge rows. With a `collapseKey` the title folds the
+/// list away (remembered between launches), and long lists show the first
+/// few rows with a "Show all" button.
 struct ChallengeSection: View {
+    /// Bulk tidy actions in the section's ⋯ menu.
+    enum TidyMenu { case finished, archived }
+
     let title: String
     let items: [ChallengeItem]
+    var collapseKey: String?
+    var preview: Int = .max
+    var tidyMenu: TidyMenu?
 
     @Environment(GameCenter.self) private var gameCenter
+    @AppStorage private var isOpen: Bool
+    @State private var showingAll = false
+    @State private var confirming: Bulk?
+
+    /// A bulk action waiting for confirmation.
+    private enum Bulk: Identifiable {
+        case clearOld, clearAll
+        var id: Self { self }
+    }
+
+    init(title: String, items: [ChallengeItem], collapseKey: String? = nil, startsOpen: Bool = true,
+         preview: Int = .max, tidyMenu: TidyMenu? = nil) {
+        self.title = title
+        self.items = items
+        self.collapseKey = collapseKey
+        self.preview = preview
+        self.tidyMenu = tidyMenu
+        _isOpen = AppStorage(wrappedValue: startsOpen, "lobby.open.\(collapseKey ?? title)")
+    }
 
     var body: some View {
         if !items.isEmpty {
+            let open = collapseKey == nil || isOpen
+            let visible = showingAll ? items : Array(items.prefix(preview))
             VStack(alignment: .leading, spacing: Space.s) {
-                SectionLabel(title)
-                ForEach(items) { item in
-                    ChallengeRow(item: item,
-                                 record: item.opponentID.flatMap(gameCenter.rivals.record(for:)))
+                HStack(spacing: Space.s) {
+                    if collapseKey != nil {
+                        CollapsibleHeader(title: title, count: items.count, isOpen: $isOpen)
+                    } else {
+                        SectionLabel(title)
+                    }
+                    Spacer(minLength: 0)
+                    if let tidyMenu, open { menu(tidyMenu) }
+                }
+                if open {
+                    ForEach(visible) { item in
+                        ChallengeRow(item: item,
+                                     record: item.opponentID.flatMap(gameCenter.rivals.record(for:)))
+                    }
+                    if items.count > preview {
+                        Button(showingAll ? "Show fewer" : "Show all \(items.count)") {
+                            withAnimation(.snappy) { showingAll.toggle() }
+                        }
+                        .font(.subheadline.bold())
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                    }
                 }
             }
+            .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirming != nil },
+                                                                     set: { if !$0 { confirming = nil } }),
+                                titleVisibility: .visible, presenting: confirming) { bulk in
+                Button(bulk == .clearOld ? "Clear \(oldItems.count)" : "Clear \(items.count)", role: .destructive) {
+                    let targets = bulk == .clearOld ? oldItems : items
+                    Task { await gameCenter.clear(targets) }
+                }
+            } message: { _ in
+                Text("They're removed for good. Your head-to-head records and history stay.")
+            }
         }
+    }
+
+    private var oldItems: [ChallengeItem] {
+        items.filter { LobbyTidy.isStale(updated: $0.updated) }
+    }
+
+    private var confirmTitle: String {
+        switch confirming {
+        case .clearOld: "Clear challenges older than a week?"
+        case .clearAll: tidyMenu == .archived ? "Clear all archived challenges?" : "Clear all finished challenges?"
+        case nil: ""
+        }
+    }
+
+    private func menu(_ kind: TidyMenu) -> some View {
+        Menu {
+            switch kind {
+            case .finished:
+                Button("Archive all", systemImage: "archivebox") {
+                    withAnimation(.snappy) { gameCenter.tidy.archive(items.map(\.id)) }
+                }
+                if !oldItems.isEmpty {
+                    Button("Archive older than a week", systemImage: "clock.arrow.circlepath") {
+                        withAnimation(.snappy) { gameCenter.tidy.archive(oldItems.map(\.id)) }
+                    }
+                    Button("Clear older than a week", systemImage: "trash", role: .destructive) { confirming = .clearOld }
+                }
+                Button("Clear all finished", systemImage: "trash", role: .destructive) { confirming = .clearAll }
+            case .archived:
+                Button("Clear all archived", systemImage: "trash", role: .destructive) { confirming = .clearAll }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+                .foregroundStyle(Theme.muted)
+                .frame(minWidth: 44, minHeight: 32)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("\(title) options")
+    }
+}
+
+/// A section title that opens and closes its list, with a count so a
+/// closed section still says what's inside.
+struct CollapsibleHeader: View {
+    let title: String
+    let count: Int
+    @Binding var isOpen: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.snappy) { isOpen.toggle() }
+        } label: {
+            HStack(spacing: Space.s) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                Text(title).eyebrow()
+                Text(count.formatted())
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Theme.pill.fill(Theme.paper))
+                    .overlay(Theme.pill.stroke(Theme.line, lineWidth: 1))
+            }
+            .foregroundStyle(Theme.muted)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(count)")
+        .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
+        .accessibilityHint(isOpen ? "Hides the list" : "Shows the list")
+        .accessibilityAddTraits([.isHeader, .isButton])
     }
 }
 
@@ -297,6 +437,17 @@ private struct ChallengeRow: View {
             }
             if item.isFinished, gameCenter.archive.match(item.id) != nil {
                 Button("Match breakdown", systemImage: "list.bullet.rectangle") { gameCenter.review(item.id) }
+            }
+            if item.isFinished || item.status == .declined {
+                if gameCenter.tidy.isArchived(item.id) {
+                    Button("Unarchive", systemImage: "tray.and.arrow.up") {
+                        withAnimation(.snappy) { gameCenter.tidy.unarchive(item.id) }
+                    }
+                } else {
+                    Button("Archive", systemImage: "archivebox") {
+                        withAnimation(.snappy) { gameCenter.tidy.archive([item.id]) }
+                    }
+                }
             }
             Button(removeTitle, systemImage: "xmark.circle", role: .destructive) { confirmingRemove = true }
         }

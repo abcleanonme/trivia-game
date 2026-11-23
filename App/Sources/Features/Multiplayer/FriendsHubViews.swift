@@ -137,6 +137,8 @@ struct BoardRow: View {
 /// head-to-head, and the latest finished games.
 struct FriendsListView: View {
     @Environment(GameCenter.self) private var gameCenter
+    @State private var removing: Friend?
+    @State private var showingRemoved = false
 
     var body: some View {
         let overall = gameCenter.history.overall
@@ -150,6 +152,8 @@ struct FriendsListView: View {
                     .init(label: "Best", value: overall.bestScore.formatted(), systemImage: "star.fill"),
                 ])
             }
+
+            addFriendButton
 
             if gameCenter.friendsAccess == .notDetermined {
                 findFriendsCard
@@ -172,6 +176,34 @@ struct FriendsListView: View {
                             FriendRow(friend: friend)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Challenge", systemImage: "bolt.fill") { gameCenter.challenge(friendID: friend.id) }
+                            Button("Remove friend", systemImage: "person.badge.minus", role: .destructive) {
+                                removing = friend
+                            }
+                        }
+                        .accessibilityAction(named: "Remove friend") { removing = friend }
+                    }
+                }
+            }
+
+            let removed = gameCenter.removedFriends
+            if !removed.isEmpty {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    CollapsibleHeader(title: "Removed friends", count: removed.count, isOpen: $showingRemoved)
+                    if showingRemoved {
+                        DividedCard(removed) { friend in
+                            HStack(spacing: Space.m) {
+                                PlayerBadge(name: friend.name, size: 32)
+                                Text(friend.name).font(.headline).lineLimit(1)
+                                Spacer(minLength: Space.s)
+                                Button("Restore") { gameCenter.restoreFriend(friend.id) }
+                                    .font(.subheadline.bold())
+                                    .accessibilityLabel("Restore \(friend.name)")
+                            }
+                            .foregroundStyle(Theme.ink)
+                            .padding(.vertical, 10)
+                        }
                     }
                 }
             }
@@ -208,6 +240,24 @@ struct FriendsListView: View {
         }
     }
 
+    private var addFriendButton: some View {
+        Button { gameCenter.addFriend() } label: {
+            Label("Add friend", systemImage: "person.badge.plus")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 48)
+        }
+        .buttonStyle(.chunky(fill: Theme.accent, foreground: .white, capsule: true))
+        .accessibilityHint("Send a Game Center friend request by name, phone number or email")
+        .confirmationDialog(removing.map { "Remove \($0.name)?" } ?? "",
+                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                            titleVisibility: .visible,
+                            presenting: removing) { friend in
+            Button("Remove friend", role: .destructive) { gameCenter.removeFriend(friend.id) }
+        } message: { _ in
+            Text(removeFriendMessage)
+        }
+    }
+
     private var findFriendsCard: some View {
         HStack(alignment: .top, spacing: Space.m) {
             Image(systemName: "person.2.badge.plus")
@@ -233,6 +283,9 @@ struct FriendsListView: View {
         .card()
     }
 }
+
+/// Game Center doesn't let apps unfriend anyone, so say what removing does.
+private let removeFriendMessage = "They come off your friends list and friend pickers in Quizio. Your record stays, and you can restore them from the bottom of the list. To unfriend them in Game Center too, go to Settings › Game Center › Friends."
 
 private func winRate(_ s: HeadToHeadStats) -> String {
     guard s.played > 0 else { return "–" }
@@ -383,7 +436,9 @@ struct FriendDetailView: View {
     let friend: Friend
 
     @Environment(GameCenter.self) private var gameCenter
+    @Environment(\.dismiss) private var dismiss
     @State private var editingRules = false
+    @State private var confirmingRemove = false
 
     var body: some View {
         let stats = gameCenter.history.stats(against: friend.id)
@@ -436,6 +491,30 @@ struct FriendDetailView: View {
         .navigationTitle(friend.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if gameCenter.tidy.isHidden(friend.id) {
+                        Button("Restore friend", systemImage: "person.badge.plus") { gameCenter.restoreFriend(friend.id) }
+                    } else {
+                        Button("Remove friend", systemImage: "person.badge.minus", role: .destructive) {
+                            confirmingRemove = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("More")
+            }
+        }
+        .confirmationDialog("Remove \(friend.name)?", isPresented: $confirmingRemove, titleVisibility: .visible) {
+            Button("Remove friend", role: .destructive) {
+                gameCenter.removeFriend(friend.id)
+                dismiss()
+            }
+        } message: {
+            Text(removeFriendMessage)
+        }
         .sheet(isPresented: $editingRules) {
             ChallengeSetupSheet(startTitle: "Challenge \(friend.name)") {
                 gameCenter.challenge(friendID: friend.id)
