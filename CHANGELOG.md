@@ -3,6 +3,13 @@
 Player-facing notes for each TestFlight build. The current build's notes are
 also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
+## Next build
+
+WEEKLY EVENTS
+- Holiday events now take over their week all year: Christmas, New Year, MLK Day (Dream Week), Lunar New Year, the Big Game, Valentine's Day, Pi Day, St. Patrick's Day, Easter, April Fools' Day and Earth Day join Halloween and Thanksgiving. Each has its own reward.
+- About 600 new questions written just for events. They only appear in their event, so they're fresh when the week comes.
+- Regular themes now take turns evenly, so a holiday no longer skips one.
+
 ## 0.2.0 (10)
 
 FRIENDS

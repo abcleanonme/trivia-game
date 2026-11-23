@@ -17,7 +17,7 @@ import Testing
         try QuestionBank(jsonData: Data(contentsOf: resources.appending(path: "\(name).json")))
     }
 
-    @Test(arguments: ["originals", "originals-ai", "opentdb"])
+    @Test(arguments: ["originals", "originals-ai", "opentdb", "events"])
     func everyQuestionIsPlayable(file: String) throws {
         let bank = try Self.load(file)
         #expect(!bank.questions.isEmpty)
@@ -26,6 +26,28 @@ import Testing
             #expect(q.choices.count == 4, "\(q.prompt)")
             #expect(Set(q.choices.map { $0.lowercased() }).count == q.choices.count, "duplicate answers: \(q.prompt)")
             #expect(QuestionBank.preferredCategoryOrder.contains(q.category), "unknown category \(q.category)")
+        }
+    }
+
+    /// Event questions only play in their event, so each must name a real
+    /// one, and none should repeat a question already in the main bank.
+    @Test func eventQuestionsAreTaggedAndNew() throws {
+        let events = try Self.load("events")
+        let ids = Set(WeeklyEvent.all.map(\.id))
+        let main = Set(QuestionBank(merging: [try Self.load("originals"), try Self.load("originals-ai"),
+                                              try Self.load("opentdb")]).questions.map { $0.prompt.lowercased() })
+        var prompts = Set<String>()
+        for q in events.questions {
+            #expect(ids.contains(q.event ?? ""), "untagged or unknown event: \(q.prompt)")
+            #expect(["easy", "medium", "hard"].contains(q.difficulty ?? ""), "\(q.prompt)")
+            #expect(q.source?.contains("Quizio original") == true, "\(q.prompt)")
+            #expect(!main.contains(q.prompt.lowercased()), "already in the main bank: \(q.prompt)")
+            #expect(prompts.insert(q.prompt.lowercased()).inserted, "repeated: \(q.prompt)")
+        }
+        // The main bank stays untagged, so event questions never leak into
+        // everyday rounds.
+        for file in ["originals", "originals-ai", "opentdb"] {
+            #expect(try Self.load(file).questions.allSatisfy { $0.event == nil }, "\(file)")
         }
     }
 

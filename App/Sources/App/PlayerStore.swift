@@ -36,6 +36,10 @@ final class PlayerStore {
     private(set) var wallet: Wallet
     private(set) var progress: PlayerProgress
     let bank: QuestionBank
+    /// Questions written for one weekly event (`events.json`). Kept out of
+    /// `bank` so they stay fresh for their week instead of turning up in
+    /// everyday rounds.
+    let eventBank: QuestionBank
 
     @ObservationIgnored private let defaults: UserDefaults
     /// Every question the player has been shown, oldest first, so rounds
@@ -51,9 +55,11 @@ final class PlayerStore {
     /// Older builds kept only the last 400 prompts here; read once to migrate.
     private static let legacyRecentKey = "recentPrompts.v1"
 
-    init(defaults: UserDefaults = .standard, bank: QuestionBank = PlayerStore.loadBundledBank()) {
+    init(defaults: UserDefaults = .standard, bank: QuestionBank = PlayerStore.loadBundledBank(),
+         eventBank: QuestionBank = PlayerStore.loadBundledFiles(PlayerStore.bundledEventFiles)) {
         self.defaults = defaults
         self.bank = bank
+        self.eventBank = eventBank
         wallet = defaults.decoded(Wallet.self, forKey: Self.walletKey) ?? .starter
         progress = defaults.decoded(PlayerProgress.self, forKey: Self.progressKey) ?? PlayerProgress()
         if let saved = defaults.decoded(SeenQuestions.self, forKey: Self.seenKey) {
@@ -105,11 +111,11 @@ final class PlayerStore {
         }
     }
 
-    /// An event's questions, matched against the whole bank once per run
-    /// of the app instead of once per round.
+    /// An event's questions (its own tagged ones plus bank matches),
+    /// worked out once per run of the app instead of once per round.
     private func eventPool(_ event: WeeklyEvent) -> QuestionBank {
         if let cached = eventPools[event.id] { return cached }
-        let pool = event.pool(from: bank)
+        let pool = QuestionBank(merging: [event.pool(from: eventBank), event.pool(from: bank)])
         eventPools[event.id] = pool
         return pool
     }
@@ -247,15 +253,21 @@ final class PlayerStore {
     /// AI-drafted), then the Open Trivia DB seed (CC BY-SA 4.0, kept in its
     /// own file; see Credits).
     nonisolated static let bundledBankFiles = ["originals", "originals-ai", "opentdb"]
+    /// Event-only questions, each tagged with its event (see docs/content-updates.md).
+    nonisolated static let bundledEventFiles = ["events"]
 
     nonisolated static func loadBundledBank() -> QuestionBank {
-        let banks = bundledBankFiles.compactMap { name -> QuestionBank? in
+        let merged = loadBundledFiles(bundledBankFiles)
+        return merged.questions.isEmpty ? QuestionBank(questions: Question.samples) : merged
+    }
+
+    nonisolated static func loadBundledFiles(_ names: [String]) -> QuestionBank {
+        let banks = names.compactMap { name -> QuestionBank? in
             guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
                   let data = try? Data(contentsOf: url) else { return nil }
             return try? QuestionBank(jsonData: data)
         }
-        let merged = QuestionBank(merging: banks)
-        return merged.questions.isEmpty ? QuestionBank(questions: Question.samples) : merged
+        return QuestionBank(merging: banks)
     }
 
     static var preview: PlayerStore {

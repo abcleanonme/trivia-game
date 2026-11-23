@@ -31,6 +31,9 @@ Writing:
 - Deduplicate: load every prompt from App/Resources/opentdb.json, originals.json and originals-ai.json, normalize them (lowercase, strip punctuation), and reject any new question whose prompt is near-identical to an existing one or that asks the same fact. Also allow no duplicates within the batch.
 - Check that the JSON parses and that every entry matches the schema. Run the TriviaKit tests if the repo has a quick way to.
 
+Event top-ups:
+- Weekly events and their question pools are described in docs/content-updates.md. If an event in the next 8 weeks of its calendar has fewer than 60 questions, write up to 40 of this week's 400 for it instead, in App/Resources/events.json with "event": "<event id>" and "source": "Quizio original (AI-drafted, <event title> event)". Check them against events.json too when deduplicating.
+
 Run history:
 - Read docs/question-pipeline/run-history.md before starting (notes there carry lessons from past runs). In your PR, append one row to the Writer table: run date, PR number and title, question count with categories, and outcome "Open, awaiting reviewer".
 
