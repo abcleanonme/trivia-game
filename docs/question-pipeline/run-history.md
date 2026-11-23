@@ -8,7 +8,7 @@ The writer and reviewer tasks each append a row per run. Rules live in writer-ru
 |---|---|---|---|
 | 2026-11-16 | #13 "Weekly questions 2026-11-16 (400, unreviewed)" | 400 (thin categories: Science, History, Geography, Movies, Art, Nature, Books, Tech, Sports, TV, Music) | Reviewer kept 372 and removed 28 duplicates of OpenTDB facts. Folded into #15 and merged to main on 2026-11-22. |
 | 2026-11-22 | #24 "Weekly questions 2026-11-22 (400, unreviewed)" | 400 (General 100; Food, Space, Human Body, Words, Holidays, Brands 40 each; Mythology 20, Vehicles 15, Comics 15, Cartoons 10). 207 easy, 153 medium, 40 hard | Reviewed 2026-11-22: 379 kept (8 fixed, 92 difficulty relabels, mostly hard/medium down to easier), 21 removed as duplicates of facts already in the bank. Now 262 easy, 108 medium, 9 hard. Open, not merged. |
-| 2026-11-23 | #PRNUM "Weekly questions 2026-11-23 (400, unreviewed)" | 400 (General 100; Food, Space, Human Body, Words, Holidays, Brands 40 each; Mythology 20, Vehicles 15, Comics 15, Cartoons 10). 223 easy, 142 medium, 35 hard | Open, awaiting reviewer |
+| 2026-11-23 | #29 "Weekly questions 2026-11-23 (400, unreviewed)" | 400 (General 100; Food, Space, Human Body, Words, Holidays, Brands 40 each; Mythology 20, Vehicles 15, Comics 15, Cartoons 10). 223 easy, 142 medium, 35 hard | Open, awaiting reviewer |
 
 ## Reviewer
 
