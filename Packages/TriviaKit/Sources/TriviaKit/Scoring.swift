@@ -72,12 +72,20 @@ public enum GameMode: String, CaseIterable, Codable, Sendable, Identifiable {
     /// Keep going until the third wrong answer.
     case survival
     /// As many as you can in 60 seconds; no stopping between questions.
+    /// A miss costs 5 seconds and a short lockout; the third miss ends it.
     case speed
 
     public var id: String { rawValue }
 
     public static let survivalStrikes = 3
     public static let speedRoundSeconds: Double = 60
+    /// Seconds taken off the Speed round clock for each miss.
+    public static let speedMissPenaltySeconds: Double = 5
+    /// Seconds the answers stay locked after a Speed round miss.
+    public static let speedMissLockoutSeconds: Double = 1.5
+
+    /// Survival and Speed both end on the third miss.
+    public var endsOnStrikes: Bool { self != .classic }
 
     public var title: String {
         switch self {
@@ -91,7 +99,7 @@ public enum GameMode: String, CaseIterable, Codable, Sendable, Identifiable {
         switch self {
         case .classic: "10 questions, 20 seconds each."
         case .survival: "Keep going until you miss \(Self.survivalStrikes)."
-        case .speed: "As many as you can in \(Int(Self.speedRoundSeconds)) seconds."
+        case .speed: "\(Int(Self.speedRoundSeconds)) seconds. A miss costs \(Int(Self.speedMissPenaltySeconds))s; \(Self.survivalStrikes) misses ends it."
         }
     }
 
@@ -118,8 +126,10 @@ public enum GameMode: String, CaseIterable, Codable, Sendable, Identifiable {
 public enum Scoring {
     /// Streak multiplier for a correct answer, where `streak` already
     /// includes that answer: x1.5 from 3 in a row, x2 from 5 in a row.
-    public static func multiplier(forStreak streak: Int) -> Double {
+    /// Speed rounds add x3 from 10 in a row, so accuracy beats spamming.
+    public static func multiplier(forStreak streak: Int, mode: GameMode = .classic) -> Double {
         switch streak {
+        case 10... where mode == .speed: 3
         case 5...: 2
         case 3...: 1.5
         default: 1
@@ -133,7 +143,7 @@ public enum Scoring {
     ///   - powerUp: the power-up used on this question, if any.
     ///   - difficulty: the question's tag; medium and hard are worth more.
     public static func breakdown(timeRemaining: Double?, streak: Int, powerUp: PowerUp?,
-                                 difficulty: String? = nil) -> ScoreBreakdown {
+                                 difficulty: String? = nil, mode: GameMode = .classic) -> ScoreBreakdown {
         var b = ScoreBreakdown()
         b.base = Difficulty.basePoints(for: difficulty)
         // Any power-up forfeits the speed bonus; relaxed mode has none.
@@ -142,7 +152,7 @@ public enum Scoring {
             b.speed = Int((Double(GameRules.maxSpeedBonus) * fraction).rounded())
         }
         let subtotal = b.base + b.speed
-        let withStreak = Int((Double(subtotal) * multiplier(forStreak: streak)).rounded())
+        let withStreak = Int((Double(subtotal) * multiplier(forStreak: streak, mode: mode)).rounded())
         b.streakBonus = withStreak - subtotal
         switch powerUp {
         case .doubleDown: b.powerUpAdjustment = withStreak

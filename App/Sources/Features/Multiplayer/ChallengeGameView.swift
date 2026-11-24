@@ -210,7 +210,7 @@ private struct ChallengeIntroView: View {
         case .survival:
             lines.append(("heart.fill", "Survival: keep going until you miss \(GameMode.survivalStrikes). Same questions as \(them)"))
         case .speed:
-            lines.append(("stopwatch.fill", "Speed round: as many as you can in \(Int(GameMode.speedRoundSeconds)) seconds. Same questions as \(them)"))
+            lines.append(("stopwatch.fill", "Speed round: as many as you can in \(Int(GameMode.speedRoundSeconds)) seconds. A miss costs \(Int(GameMode.speedMissPenaltySeconds))s, and \(GameMode.survivalStrikes) misses ends it. Same questions as \(them)"))
         }
         let level = data.level == .mixed ? "Mixed levels" : "\(data.level.title) questions"
         lines.append(("chart.bar.fill", ChallengeSetup.topicSummary(data.categories).map { "\(level) from \($0)" } ?? level))

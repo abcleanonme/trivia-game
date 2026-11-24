@@ -53,6 +53,11 @@ public struct GameSession: Sendable {
     public private(set) var powerUpsUsed = 0
     /// Questions swapped out by Skip. The player still saw them.
     public private(set) var skippedQuestions: [Question] = []
+    /// Speed round: the miss being shown while answers are locked. The round
+    /// clock keeps running, so spamming taps costs time instead of paying.
+    public private(set) var lockedMiss: QuestionResult?
+    /// Seconds left on the lockout after a Speed round miss.
+    public private(set) var lockoutRemaining: Double = 0
 
     /// Streak before the last miss, so second chance can restore it.
     private var streakBeforeMiss: Int?
@@ -93,11 +98,13 @@ public struct GameSession: Sendable {
     public var correctCount: Int { results.filter(\.correct).count }
     public var sparksEarned: Int { Scoring.sparks(forPoints: totalPoints) }
     public var breakdown: ScoreBreakdown { results.reduce(.zero) { $0 + $1.breakdown } }
-    /// Wrong answers and timeouts so far (Survival ends at three).
+    /// Wrong answers and timeouts so far (Survival and Speed end at three).
     public var strikes: Int { results.filter { !$0.correct }.count }
     public var strikesLeft: Int? {
-        mode == .survival ? max(GameMode.survivalStrikes - strikes, 0) : nil
+        mode.endsOnStrikes ? max(GameMode.survivalStrikes - strikes, 0) : nil
     }
+    /// Answers can't be tapped (Speed round lockout after a miss).
+    public var isLockedOut: Bool { lockoutRemaining > 0 }
     public var isLastQuestion: Bool {
         index == questions.count - 1 || strikesLeft == 0
     }
@@ -109,12 +116,20 @@ public struct GameSession: Sendable {
     /// Advances the clock. Times out the question when it reaches zero.
     public mutating func tick(by seconds: Double) {
         guard phase == .asking else { return }
-        questionElapsed += seconds
+        if !isLockedOut { questionElapsed += seconds }
         guard isTimed else { return }
         if let round = roundTimeRemaining {
             roundTimeRemaining = max(round - seconds, 0)
             // The question on screen when time runs out doesn't count.
-            if roundTimeRemaining == 0 { phase = .finished }
+            if roundTimeRemaining == 0 {
+                endLockout()
+                phase = .finished
+                return
+            }
+            if isLockedOut {
+                lockoutRemaining = max(lockoutRemaining - seconds, 0)
+                if !isLockedOut { endLockout(); nextSpeedQuestion() }
+            }
             return
         }
         timeRemaining = max(timeRemaining - seconds, 0)
@@ -122,7 +137,7 @@ public struct GameSession: Sendable {
     }
 
     public mutating func answer(_ choice: Int) {
-        guard phase == .asking,
+        guard phase == .asking, !isLockedOut,
               let q = currentQuestion,
               q.choices.indices.contains(choice),
               !eliminated.contains(choice) else { return }
@@ -143,7 +158,7 @@ public struct GameSession: Sendable {
     // MARK: Power-ups
 
     public func canUse(_ powerUp: PowerUp) -> Bool {
-        guard powerUpThisQuestion == nil, powerUpsUsed < powerUpLimit else { return false }
+        guard powerUpThisQuestion == nil, powerUpsUsed < powerUpLimit, !isLockedOut else { return false }
         switch powerUp {
         case .secondChance:
             // Only after a real miss with time still on the clock.
@@ -226,7 +241,7 @@ public struct GameSession: Sendable {
             streak += 1
             bestStreak = max(bestStreak, streak)
             breakdown = Scoring.breakdown(timeRemaining: clock, streak: streak, powerUp: powerUpThisQuestion,
-                                          difficulty: q.difficulty)
+                                          difficulty: q.difficulty, mode: mode)
         } else {
             streakBeforeMiss = streak
             streak = 0
@@ -241,8 +256,30 @@ public struct GameSession: Sendable {
             phase = .answered(result)
             return
         }
-        // Speed round: straight on to the next question, no feedback stop.
+        // Speed round: no feedback stop. A miss costs clock time and locks
+        // the answers for a moment, and the third miss ends the round.
         streakBeforeMiss = nil
+        guard !correct else { return nextSpeedQuestion() }
+        if strikesLeft == 0 {
+            phase = .finished
+            return
+        }
+        let round = max((roundTimeRemaining ?? 0) - GameMode.speedMissPenaltySeconds, 0)
+        roundTimeRemaining = round
+        if round == 0 {
+            phase = .finished
+            return
+        }
+        lockedMiss = result
+        lockoutRemaining = GameMode.speedMissLockoutSeconds
+    }
+
+    private mutating func endLockout() {
+        lockedMiss = nil
+        lockoutRemaining = 0
+    }
+
+    private mutating func nextSpeedQuestion() {
         if index + 1 < questions.count {
             index += 1
             startQuestion()

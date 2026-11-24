@@ -10,6 +10,11 @@ WEEKLY EVENTS
 - About 600 new questions written just for events. They only appear in their event, so they're fresh when the week comes.
 - Regular themes now take turns evenly, so a holiday no longer skips one.
 
+SPEED ROUND
+- No more answer spamming. A wrong answer takes 5 seconds off the clock and locks the answers for a moment while it shows you the right one.
+- Three misses ends the round, like Survival.
+- Long streaks pay more: 10 in a row in a Speed round is worth x3.
+
 ## 0.2.0 (10)
 
 FRIENDS

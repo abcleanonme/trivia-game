@@ -67,6 +67,8 @@ struct QuizView: View {
                                              style: style(for: i, in: question)) {
                                     onAnswer(i)
                                 }
+                                // Speed round lockout after a miss.
+                                .allowsHitTesting(!session.isLockedOut)
                                 // Answers deal in one after another.
                                 .staggeredAppear(i + 1)
                             }
@@ -184,6 +186,7 @@ struct QuizView: View {
         case .speed:
             ProgressBar(value: session.roundTimeRemaining ?? 0,
                         total: max(GameMode.speedRoundSeconds, session.roundTimeRemaining ?? 0))
+            StrikesView(left: session.strikesLeft ?? 0)
         }
     }
 
@@ -250,7 +253,7 @@ struct QuizView: View {
     }
 
     private func style(for i: Int, in q: Question) -> AnswerButton.Style {
-        if let r = lastResult {
+        if let r = lastResult ?? session.lockedMiss {
             if q.isCorrect(i) { return .correct }
             if i == r.choice { return .wrong }
             return .dimmed
@@ -321,6 +324,8 @@ private struct ClockView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Bumped when Extra time lands, to float a "+10s" over the clock.
     @State private var bonus = 0
+    /// Bumped on a Speed round miss, to float the time penalty.
+    @State private var penalty = 0
 
     private var left: Double { session.roundTimeRemaining ?? session.timeRemaining }
     private var full: Double { session.roundTimeRemaining == nil ? GameRules.questionTime : GameMode.speedRoundSeconds }
@@ -365,11 +370,21 @@ private struct ClockView: View {
                                 .id(bonus)
                         }
                     }
+                    .overlay(alignment: .bottom) {
+                        if penalty > 0 {
+                            FloatingCallout(text: "-\(Int(GameMode.speedMissPenaltySeconds))s", color: Theme.wrong)
+                                .offset(y: 18)
+                                .id(penalty)
+                        }
+                    }
             }
             .animation(Motion.fade, value: urgent)
             .animation(Motion.settle, value: session.timeRemaining > GameRules.questionTime)
             .onChange(of: session.powerUpThisQuestion) { _, new in
                 if new == .extraTime { bonus += 1 }
+            }
+            .onChange(of: session.lockedMiss != nil) { _, locked in
+                if locked { penalty += 1 }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(seconds) seconds left")

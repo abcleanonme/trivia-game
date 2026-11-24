@@ -250,6 +250,73 @@ private func finishedRound(correct: Int, of total: Int = 10, category: String = 
         #expect(s.results.count == 2)
     }
 
+    @Test func speedMissCostsTimeAndLocksAnswers() {
+        var s = GameSession(questions: (0..<50).map { question($0) }, mode: .speed)
+        s.answer(1) // wrong
+        #expect(s.roundTimeRemaining == GameMode.speedRoundSeconds - GameMode.speedMissPenaltySeconds)
+        #expect(s.isLockedOut)
+        #expect(s.lockedMiss?.choice == 1)
+        #expect(s.index == 0) // the miss stays up during the lockout
+        // Spamming during the lockout does nothing.
+        s.answer(0)
+        s.answer(2)
+        #expect(s.results.count == 1)
+        #expect(!s.canUse(.skip))
+        s.tick(by: 1)
+        #expect(s.isLockedOut)
+        s.tick(by: 0.5)
+        #expect(!s.isLockedOut)
+        #expect(s.lockedMiss == nil)
+        #expect(s.index == 1)
+        #expect(s.phase == .asking)
+        // The round clock kept running through the lockout.
+        #expect(s.roundTimeRemaining == GameMode.speedRoundSeconds - GameMode.speedMissPenaltySeconds - 1.5)
+        s.answer(0)
+        #expect(s.correctCount == 1)
+        #expect(s.index == 2)
+    }
+
+    @Test func speedRoundEndsOnThirdMiss() {
+        var s = GameSession(questions: (0..<50).map { question($0) }, mode: .speed)
+        for _ in 0..<2 {
+            s.answer(1)
+            s.tick(by: GameMode.speedMissLockoutSeconds)
+        }
+        #expect(s.strikesLeft == 1)
+        #expect(s.phase == .asking)
+        s.answer(1)
+        #expect(s.phase == .finished)
+        #expect(s.results.count == 3)
+    }
+
+    @Test func speedMissPenaltyCanEndTheRound() {
+        var s = GameSession(questions: (0..<50).map { question($0) }, mode: .speed)
+        s.tick(by: GameMode.speedRoundSeconds - 3)
+        s.answer(1)
+        #expect(s.roundTimeRemaining == 0)
+        #expect(s.phase == .finished)
+        #expect(!s.isLockedOut)
+    }
+
+    @Test func speedRoundClockRunningOutEndsLockout() {
+        var s = GameSession(questions: (0..<50).map { question($0) }, mode: .speed)
+        s.tick(by: GameMode.speedRoundSeconds - 6)
+        s.answer(1) // 1s left, locked
+        s.tick(by: 1)
+        #expect(s.phase == .finished)
+        #expect(s.lockedMiss == nil)
+    }
+
+    @Test func speedStreakPaysTriple() {
+        #expect(Scoring.multiplier(forStreak: 10, mode: .speed) == 3)
+        #expect(Scoring.multiplier(forStreak: 9, mode: .speed) == 2)
+        #expect(Scoring.multiplier(forStreak: 10) == 2) // Classic stays at x2
+        var s = GameSession(questions: (0..<50).map { question($0) }, mode: .speed)
+        for _ in 0..<10 { s.answer(0) }
+        #expect(s.results.last?.points == 300)
+        #expect(s.results.first?.points == 100)
+    }
+
     @Test func harderQuestionsPayMore() {
         #expect(Scoring.breakdown(timeRemaining: nil, streak: 1, powerUp: nil, difficulty: "easy").total == 100)
         #expect(Scoring.breakdown(timeRemaining: nil, streak: 1, powerUp: nil, difficulty: "medium").total == 125)
