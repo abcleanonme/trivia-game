@@ -1,6 +1,6 @@
 # Quizio Privacy Policy
 
-_Last updated: November 11, 2026_
+_Last updated: November 24, 2026_
 
 Quizio - Trivia with Friends ("Quizio", "the app") is a paid trivia game with
 no ads and no in-app purchases. This policy explains what happens to your
@@ -52,8 +52,8 @@ involves no data sharing; they ship inside the app.
 
 ## Contact
 
-Questions about this policy: open an issue at
-<https://github.com/abcleanonme/trivia-game/issues>.
+Questions about this policy: email
+[quiziotriviawithfriends@gmail.com](mailto:quiziotriviawithfriends@gmail.com).
 
 ## Changes
 
