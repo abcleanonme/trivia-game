@@ -4,8 +4,8 @@ Quizio - Trivia with Friends is a paid trivia game for iPhone and iPad with no a
 
 ## Get help
 
-Found a bug, a wrong answer, or have an idea? Open an issue at
-<https://github.com/abcleanonme/trivia-game/issues>.
+Found a bug, a wrong answer, or have an idea? Email
+[quiziotriviawithfriends@gmail.com](mailto:quiziotriviawithfriends@gmail.com).
 
 You can also flag a single question inside the app: tap the flag on any question, then send your flagged questions from Settings.
 
