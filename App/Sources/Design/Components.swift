@@ -1,4 +1,5 @@
 import SwiftUI
+import TriviaKit
 
 /// A row of small stats in one card: icon and label on top, value below,
 /// hairlines between. Four across on phones; two rows of two when large
@@ -130,8 +131,58 @@ enum CategoryStyle {
         case "nature": "leaf.fill"
         case "tech": "cpu.fill"
         case "pop culture": "star.fill"
+        case "anime": "sparkles"
+        case "food": "fork.knife"
+        case "space": "moon.stars.fill"
+        case "human body": "heart.fill"
+        case "words": "textformat.abc"
+        case "mythology": "shield.lefthalf.filled"
+        case "holidays": "gift.fill"
+        case "brands": "tag.fill"
+        case "vehicles": "car.fill"
+        case "cartoons": "face.smiling.fill"
+        case "comics": "text.bubble.fill"
         default: "questionmark.circle.fill"
         }
+    }
+}
+
+/// Pick any number of categories as chips. None picked means a mixed
+/// round, shown by the "Mixed" chip; tapping it clears the picks.
+struct CategoryChips: View {
+    let categories: [String]
+    @Binding var selection: [String]
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            chip("Mixed", symbol: "shuffle", on: selection.isEmpty) { selection = [] }
+            ForEach(categories, id: \.self) { category in
+                chip(category, symbol: CategoryStyle.symbol(for: category),
+                     on: selection.contains(category)) { toggle(category) }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Categories")
+    }
+
+    private func toggle(_ category: String) {
+        if let i = selection.firstIndex(of: category) {
+            selection.remove(at: i)
+        } else {
+            selection = ChallengeSetup.ordered(selection + [category])
+        }
+    }
+
+    private func chip(_ title: String, symbol: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: on && title != "Mixed" ? "checkmark" : symbol)
+                .labelStyle(CompactLabelStyle())
+                .font(.footnote.weight(.bold))
+                .padding(.horizontal, Space.m)
+                .frame(minHeight: 36)
+        }
+        .buttonStyle(.chip(selected: on, depth: on ? 2 : 3))
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 

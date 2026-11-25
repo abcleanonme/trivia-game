@@ -85,7 +85,7 @@ struct CreditsView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Open Trivia Database").font(.headline)
-                    Text("Many questions come from the Open Trivia Database, a free, user-contributed trivia question database. They are used under the Creative Commons Attribution-ShareAlike 4.0 license. We renamed categories and shuffle answer order.")
+                    Text("Many questions come from the Open Trivia Database, a free, user-contributed trivia question database. They are used under the Creative Commons Attribution-ShareAlike 4.0 license. We renamed categories, changed some difficulty levels, and shuffle answer order.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
