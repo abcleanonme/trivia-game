@@ -365,6 +365,7 @@ private struct ChallengeResultView: View {
             .readableWidth()
             .background(Theme.paper)
         }
+        .ratingPrompt(after: outcome == .won ? .challengeWin(matchID: round.id) : nil)
     }
 }
 
