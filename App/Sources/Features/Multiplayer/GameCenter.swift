@@ -305,7 +305,7 @@ final class GameCenter: NSObject {
         let updated = match.participants.compactMap(\.lastTurnDate).max() ?? match.creationDate
         var item = ChallengeItem(id: match.matchID, opponentID: opponent?.player?.gamePlayerID,
                                  opponentName: name, status: .theirTurn,
-                                 myPoints: data?.turn(for: me)?.points,
+                                 myPoints: data?.turn(for: me)?.points ?? pending[match.matchID]?.points,
                                  theirPoints: others.compactMap(\.points).max(),
                                  updated: updated, setup: data?.setup, seats: seats)
         if let data, !data.isSupported {
@@ -332,6 +332,9 @@ final class GameCenter: NSObject {
                                            opponentID: opponentID, opponentName: name,
                                            outcome: outcome, playedAt: updated))
             }
+        case _ where !myTurn && pending[match.matchID] != nil:
+            // Played already; the score is waiting on this phone for our turn.
+            item.status = .theirTurn
         case _ where mine?.status == .invited && data?.hasPlayed(me) == true:
             // Our score carried over from the head-to-head this group grew
             // out of: nothing to play, just waiting on the others.
@@ -464,8 +467,21 @@ final class GameCenter: NSObject {
             return data
         }
         guard stillOurs else {
-            setPending(nil, for: matchID)
-            throw ChallengeError.notYourTurn
+            let mine = match.participants.first { $0.player?.gamePlayerID == me }
+            let stillIn = match.status != .ended && mine.map {
+                $0.matchOutcome == .none && $0.status != .declined && $0.status != .done
+            } ?? false
+            guard stillIn else {
+                setPending(nil, for: matchID)
+                throw ChallengeError.notYourTurn
+            }
+            // Group match where someone else holds the turn (everyone gets
+            // the invite at once, but Game Center only takes a score from
+            // whoever's turn it is). Keep the score on this phone; it sends
+            // by itself once the turn reaches us.
+            data.record(turn)
+            data.setPlayer(localPlayerInfo, for: me)
+            return data
         }
         data.record(turn)
         data.setPlayer(localPlayerInfo, for: me)
