@@ -59,6 +59,7 @@ struct ChallengeGameView: View {
                 }
             case .result(let data):
                 ChallengeResultView(round: round, data: data, me: me,
+                                    queued: gameCenter.hasPendingTurn(round.id),
                                     balance: store.wallet.sparks,
                                     onRematch: rematch,
                                     onDone: { dismiss() })
@@ -243,6 +244,8 @@ private struct ChallengeResultView: View {
     let round: ChallengeRound
     let data: ChallengeData
     let me: String
+    /// Played before the turn reached us: the score sends when it does.
+    var queued = false
     let balance: Int
     let onRematch: () -> Void
     let onDone: () -> Void
@@ -273,6 +276,7 @@ private struct ChallengeResultView: View {
         case .won: return "You won!"
         case .lost: return "\(round.opponentName) won"
         case .tied: return "It's a tie"
+        case nil where queued: return "Score saved"
         case nil: return round.isGroup ? "Score sent to the group" : "Sent to \(round.opponentName)"
         }
     }
@@ -297,7 +301,9 @@ private struct ChallengeResultView: View {
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
                     if outcome == nil {
-                        Text(waitingOn.count > 1
+                        Text(queued
+                             ? "Someone else is up first. Your score joins the group by itself when the turn gets to you."
+                             : waitingOn.count > 1
                              ? "Waiting on \(waitingOn.count) players. We'll let you know when they've played."
                              : "We'll let you know when they've played.")
                             .font(.callout)

@@ -5,6 +5,9 @@ also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
 ## Next build
 
+GROUP MATCHES
+- Fixed "Couldn't send your score" in group matches. If you play before it's your turn, your score is saved and joins the group by itself when the turn gets to you.
+
 WEEKLY EVENTS
 - Holiday events now take over their week all year: Christmas, New Year, MLK Day (Dream Week), Lunar New Year, the Big Game, Valentine's Day, Pi Day, St. Patrick's Day, Easter, April Fools' Day and Earth Day join Halloween and Thanksgiving. Each has its own reward.
 - About 600 new questions written just for events. They only appear in their event, so they're fresh when the week comes.
