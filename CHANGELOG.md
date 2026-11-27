@@ -5,6 +5,9 @@ also in `scripts/testflight-notes.txt` (pasted into TestFlight "What to Test").
 
 ## Next build
 
+RATINGS
+- After a great round (80%+ right) or a challenge win, Quizio may ask for an App Store rating. Never on your first day, at most once per app version, and at least 120 days apart.
+
 WEEKLY EVENTS
 - Holiday events now take over their week all year: Christmas, New Year, MLK Day (Dream Week), Lunar New Year, the Big Game, Valentine's Day, Pi Day, St. Patrick's Day, Easter, April Fools' Day and Earth Day join Halloween and Thanksgiving. Each has its own reward.
 - About 600 new questions written just for events. They only appear in their event, so they're fresh when the week comes.

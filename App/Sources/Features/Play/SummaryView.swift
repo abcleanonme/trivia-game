@@ -144,6 +144,7 @@ struct SummaryView: View {
             playedFanfare = true
             SoundEffects.shared.play(.roundEnd)
         }
+        .ratingPrompt(after: .round(correct: session.correctCount, of: session.results.count))
     }
 
     private var sparksEarned: Int { rewards?.sparks ?? session.sparksEarned }
